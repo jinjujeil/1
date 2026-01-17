@@ -67,12 +67,13 @@
     // [중요] 아래 괄호 { } 안에 아까 복사한 firebaseConfig 내용을 붙여넣으세요!
     // -----------------------------------------------------------
     const firebaseConfig = {
-        apiKey: "여기에_붙여넣으세요",
-        authDomain: "...",
-        projectId: "...",
-        storageBucket: "...",
-        messagingSenderId: "...",
-        appId: "..."
+        "AIzaSyAGdK_AGLtW0DpTvJ3KKrdfq_InIBUI-lY",
+  authDomain: "attendence-e9aa8.firebaseapp.com",
+  projectId: "attendence-e9aa8",
+  storageBucket: "attendence-e9aa8.firebasestorage.app",
+  messagingSenderId: "449396483783",
+  appId: "1:449396483783:web:091b692225089b85a140e2",
+  measurementId: "G-5DW7DFXBSC"
     };
     // -----------------------------------------------------------
 
