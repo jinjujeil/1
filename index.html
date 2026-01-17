@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>스마트 학원 관리 (Pro)</title>
+    <title>스마트 학원 관리 (Lite)</title>
     <style>
         /* --- 1. 기본 스타일 --- */
         body { font-family: 'Apple SD Gothic Neo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; overflow: hidden; overscroll-behavior: none; }
         
+        /* 고정 헤더 */
         .fixed-header {
             position: absolute; top: 0; left: 0; width: 100%; height: 110px; z-index: 1000;
             background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
@@ -32,7 +33,7 @@
             position: absolute; top: 110px; left: 0; right: 0; bottom: 0;
             background-color: #e5e7eb; 
             overflow: hidden;
-            touch-action: none; 
+            touch-action: none; /* 브라우저 기본 동작 차단 */
             cursor: grab;
         }
         #canvasContainer:active { cursor: grabbing; }
@@ -59,9 +60,13 @@
             background: white; border: 2px solid #cbd5e1; border-radius: 8px;
             cursor: pointer; user-select: none;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: border-color 0.2s, background-color 0.2s; 
+            /* 클릭 효과를 위해 active 가상 클래스 활용 */
+            transition: transform 0.1s;
             z-index: 10;
         }
+        /* 눌렸을 때 살짝 들어가는 효과 */
+        .seat:active { transform: scale(0.95); }
+
         .seat.dragging { 
             opacity: 0.9; z-index: 100; 
             box-shadow: 0 15px 30px rgba(0,0,0,0.3); 
@@ -70,8 +75,8 @@
 
         /* 🔴 좌석 번호 스타일 (왼쪽 위 구석) */
         .seat-num {
-            position: absolute; top: 3px; left: 6px;
-            font-size: 0.75rem; color: #94a3b8; font-weight: 600;
+            position: absolute; top: 4px; left: 6px;
+            font-size: 0.7rem; color: #94a3b8; font-weight: 700;
             pointer-events: none;
         }
 
@@ -140,12 +145,406 @@
 
 <div class="fixed-header">
     <div class="top-bar">
-        <div class="app-title">🏫 스마트 학원 관리 (Pro)</div>
+        <div class="app-title">🏫 스마트 학원 관리 (Lite)</div>
         <div class="clock" id="seoulClock">00:00</div>
     </div>
     <nav class="main-nav">
         <button class="nav-btn active" onclick="switchView('attendance')">📋 출석 체크</button>
         <button class="nav-btn" onclick="switchView('logbook')">📊 관리 대장</button>
+    </nav>
+</div>
+
+<div id="canvasContainer">
+    <div id="world">
+        <div id="grid-bg"></div>
+    </div>
+</div>
+
+<div id="attendanceControls" class="floating-controls">
+    <div class="control-box">
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+            <div id="periodInfo" style="font-size:0.9rem; font-weight:bold;">전체 기록 모드</div>
+            <div style="font-size:0.8rem;">
+                <label><input type="checkbox" id="modeEditName"> 이름수정</label>
+                <label style="color:blue; margin-left:8px; font-weight:bold;"><input type="checkbox" id="modeLayout"> 🏗️자유배치</label>
+            </div>
+        </div>
+        <div class="period-scroll" id="periodBtns"></div>
+        <div class="class-scroll" id="classTabs"></div>
+        
+        <div id="layoutTools" class="settings-box">
+            <hr style="border:0; border-top:1px solid #eee; margin:5px 0;">
+            <button class="btn-action" onclick="resetToGrid(5,6)">기본 5x6 생성</button>
+            <button class="btn-action" style="background:#4f46e5;" onclick="resetToMedical()">📸의대반(번호할당)</button>
+        </div>
+    </div>
+</div>
+
+<div id="logbookView">
+    <h3>📋 실시간 관리 대장</h3>
+    <table id="logbookTable"></table>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+    // 🔴 [중요] Firebase 키 입력 🔴
+    const firebaseConfig = {
+        apiKey: "AIzaSyAGdK_AGLtW0DpTvJ3KKrdfq_InIBUI-lY",
+        authDomain: "attendence-e9aa8.firebaseapp.com",
+        projectId: "attendence-e9aa8",
+        storageBucket: "attendence-e9aa8.firebasestorage.app",
+        messagingSenderId: "449396483783",
+        appId: "1:449396483783:web:091b692225089b85a140e2",
+        measurementId: "G-5DW7DFXBSC"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    const CLASSES = ['의대반(101)', 'B반', 'C반', 'D반', 'E반', 'F반'];
+    let currentClassIndex = 0;
+    let currentPeriod = 'day'; 
+    let todayStr = "";
+    
+    // 뷰포트 상태 (Pan Only)
+    let panX = 0, panY = 0;
+    const FIXED_SCALE = 1.0; // 확대축소 제거 -> 고정 사이즈
+    
+    let dbLayout = {}; 
+    let dbLog = {};    
+
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('seoulClock').innerText = now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
+        const offset = now.getTimezoneOffset() * 60000;
+        const krTime = new Date(now.getTime() + offset + (9 * 60 * 60 * 1000));
+        todayStr = krTime.toISOString().split('T')[0];
+    }
+    setInterval(updateClock, 1000); updateClock();
+
+    window.switchView = (mode) => {
+        const controls = document.getElementById('attendanceControls');
+        const canvas = document.getElementById('canvasContainer');
+        const logbook = document.getElementById('logbookView');
+        const btns = document.querySelectorAll('.nav-btn');
+
+        if(mode === 'attendance') {
+            controls.style.display = 'flex';
+            canvas.style.display = 'block';
+            logbook.classList.remove('active');
+            btns[0].classList.add('active');
+            btns[1].classList.remove('active');
+        } else {
+            controls.style.display = 'none';
+            canvas.style.display = 'none';
+            logbook.classList.add('active');
+            btns[0].classList.remove('active');
+            btns[1].classList.add('active');
+            renderLogbook();
+        }
+    }
+
+    // --- 캔버스 조작 (Pan Only) ---
+    const container = document.getElementById('canvasContainer');
+    const world = document.getElementById('world');
+
+    function updateTransform() {
+        world.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${FIXED_SCALE})`;
+    }
+
+    function centerView() {
+        const cw = container.clientWidth;
+        panX = (cw - 600) / 2; // 중앙 정렬
+        if(panX < 0) panX = 10;
+        panY = 100;
+        updateTransform();
+    }
+    setTimeout(centerView, 500);
+
+    let isPanning = false;
+    let startX = 0, startY = 0;
+
+    // 배경 드래그 (이동)
+    container.addEventListener('pointerdown', e => {
+        // 배치모드에서 좌석을 눌렀을 땐 배경이동 안 함
+        if(e.target.closest('.seat') && document.getElementById('modeLayout').checked) return;
+        
+        container.setPointerCapture(e.pointerId);
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+    });
+
+    container.addEventListener('pointermove', e => {
+        if (!isPanning) return;
+        e.preventDefault();
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+    });
+
+    container.addEventListener('pointerup', e => {
+        isPanning = false;
+        container.releasePointerCapture(e.pointerId);
+    });
+
+
+    // --- Firebase & 렌더링 ---
+    onValue(ref(database, 'academy/config'), snap => { dbLayout = snap.val() || {}; renderSeats(); renderLogbook(); });
+    onValue(ref(database, `academy/logs/${todayStr}`), snap => { dbLog = snap.val() || {}; renderSeats(); renderLogbook(); });
+
+    function renderSeats() {
+        renderUIControls();
+        world.innerHTML = '<div id="grid-bg"></div>';
+        
+        const students = dbLayout[currentClassIndex]?.students || [];
+        const isLayoutMode = document.getElementById('modeLayout').checked;
+        const layoutTools = document.getElementById('layoutTools');
+        
+        if(isLayoutMode) {
+            layoutTools.classList.add('show');
+            world.classList.add('editing');
+        } else {
+            layoutTools.classList.remove('show');
+            world.classList.remove('editing');
+        }
+
+        students.forEach((s, idx) => {
+            if(!s.isVisible && !isLayoutMode) return;
+
+            const el = document.createElement('div');
+            el.className = 'seat';
+            
+            const x = s.x ?? (idx % 6) * 100 + 50;
+            const y = s.y ?? Math.floor(idx / 6) * 80 + 50;
+            el.style.transform = `translate(${x}px, ${y}px)`;
+
+            let status = 0; 
+            const log = dbLog[currentClassIndex] || {};
+            if(currentPeriod === 'day') status = log[`day_${idx}`] || 0;
+            else {
+                const dayStatus = log[`day_${idx}`] || 0;
+                status = (dayStatus > 0) ? dayStatus : (log[`p${currentPeriod}_${idx}`] || 0);
+            }
+
+            if(status===1) { el.classList.add('absent'); el.innerHTML += `<span class="seat-status">결석</span>`; }
+            else if(status===2) { el.classList.add('early'); el.innerHTML += `<span class="seat-status">조퇴</span>`; }
+            else if(status===3) { el.classList.add('missing'); el.innerHTML += `<span class="seat-status">이석</span>`; }
+            else { el.classList.add('present'); el.innerHTML += `<span class="seat-status">출석</span>`; }
+
+            // 🔴 좌석 번호 표시
+            const numHtml = s.seatNum ? `<div class="seat-num">${s.seatNum}</div>` : '';
+            el.insertAdjacentHTML('afterbegin', `${numHtml}<div class="seat-name">${s.name}</div>`);
+            if(!s.isVisible) el.classList.add('hidden-seat');
+
+            // --- ✋ 중요: 터치/클릭 로직 분기 ---
+            
+            // 1. 배치 모드 (드래그)
+            if (isLayoutMode) {
+                el.addEventListener('pointerdown', e => {
+                    e.stopPropagation(); // 배경 이동 방지
+                    el.classList.add('dragging');
+                    el.setPointerCapture(e.pointerId);
+
+                    const rect = el.getBoundingClientRect();
+                    const offsetX = e.clientX - rect.left;
+                    const offsetY = e.clientY - rect.top;
+
+                    function move(evt) {
+                        const containerRect = container.getBoundingClientRect();
+                        const canvasMouseX = evt.clientX - containerRect.left;
+                        const canvasMouseY = evt.clientY - containerRect.top;
+                        
+                        let worldX = canvasMouseX - panX;
+                        let worldY = canvasMouseY - panY;
+
+                        worldX -= offsetX;
+                        worldY -= offsetY;
+
+                        el.style.transform = `translate(${worldX}px, ${worldY}px)`;
+                        el.dataset.nx = Math.round(worldX);
+                        el.dataset.ny = Math.round(worldY);
+                    }
+
+                    function up(evt) {
+                        el.removeEventListener('pointermove', move);
+                        el.removeEventListener('pointerup', up);
+                        el.classList.remove('dragging');
+                        const finalX = el.dataset.nx ? parseInt(el.dataset.nx) : x;
+                        const finalY = el.dataset.ny ? parseInt(el.dataset.ny) : y;
+                        set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/x`), finalX);
+                        set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/y`), finalY);
+                    }
+                    el.addEventListener('pointermove', move);
+                    el.addEventListener('pointerup', up);
+                });
+            } 
+            
+            // 2. 일반 모드 (출석 체크 - 터치 뗄 때 적용)
+            else {
+                let startX=0, startY=0;
+                let isDrag = false;
+
+                el.addEventListener('pointerdown', e => {
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    isDrag = false;
+                });
+
+                el.addEventListener('pointermove', e => {
+                    // 손가락이 조금이라도 움직이면 드래그(스크롤)로 간주
+                    if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
+                        isDrag = true;
+                    }
+                });
+
+                el.addEventListener('pointerup', e => {
+                    // 드래그가 아닐 때만(제자리 터치 후 뗐을 때만) 실행
+                    if (!isDrag) {
+                        handleSeatClick(idx, s);
+                    }
+                });
+            }
+
+            world.appendChild(el);
+        });
+    }
+
+    function handleSeatClick(idx, s) {
+        if(document.getElementById('modeEditName').checked) {
+            const name = prompt("이름 변경", s.name);
+            if(name) set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/name`), name);
+            return;
+        }
+
+        const log = dbLog[currentClassIndex] || {};
+        if(currentPeriod === 'day') {
+            const next = ((log[`day_${idx}`]||0) + 1) % 3;
+            set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/day_${idx}`), next);
+        } else {
+            if((log[`day_${idx}`]||0) !== 0) { alert("결석/조퇴자는 수정 불가"); return; }
+            const curr = log[`p${currentPeriod}_${idx}`] || 0;
+            set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/p${currentPeriod}_${idx}`), curr===0 ? 3 : 0);
+        }
+    }
+
+    function renderUIControls() {
+        const pCont = document.getElementById('periodBtns');
+        pCont.innerHTML = '';
+        ['day',1,2,3,4,5,6,7,8].forEach(p => {
+            const btn = document.createElement('button');
+            const isDay = p==='day';
+            btn.className = `period-btn ${isDay?'day-record':''} ${currentPeriod==String(p)?'active':''}`;
+            btn.innerText = isDay ? '전체명단' : `${p}교시`;
+            btn.onclick = () => { currentPeriod = String(p); renderSeats(); };
+            pCont.appendChild(btn);
+        });
+
+        const cCont = document.getElementById('classTabs');
+        cCont.innerHTML = '';
+        CLASSES.forEach((cls, i) => {
+            const btn = document.createElement('button');
+            btn.className = `class-tab ${i===currentClassIndex?'active':''}`;
+            btn.innerText = dbLayout[i]?.name || cls;
+            btn.onclick = () => { currentClassIndex = i; renderSeats(); };
+            cCont.appendChild(btn);
+        });
+        
+        document.getElementById('periodInfo').innerText = currentPeriod === 'day' ? "📢 결석/조퇴 체크" : `📢 ${currentPeriod}교시 이석 체크`;
+    }
+
+    // --- 초기화 도구 ---
+    window.resetToGrid = (cols, rows) => {
+        if(!confirm("초기화 하시겠습니까?")) return;
+        let students = [];
+        let num = 1;
+        for(let r=0; r<rows; r++) {
+            for(let c=0; c<cols; c++) {
+                students.push({ name: "빈자리", isVisible: true, x: c * 100 + 50, y: r * 80 + 50, seatNum: num++ });
+            }
+        }
+        set(ref(database, `academy/config/${currentClassIndex}`), { name: CLASSES[currentClassIndex], students });
+    }
+
+    // 🔴 의대반 번호 할당 (1~25 세로 방향)
+    window.resetToMedical = () => {
+        if(!confirm("의대반(101) 스타일로 초기화?")) return;
+        const students = [];
+        const add = (name, x, y, num) => students.push({name, isVisible:true, x, y, seatNum: num});
+        
+        let seatCount = 1;
+
+        // 1열 (1~7)
+        const c1=["하지상","김선준","심현우","탁민혁","하지안","오동운","김은황"];
+        c1.forEach((n, i) => add(n, 50, 50 + i*75, seatCount++)); 
+
+        // 2열 (8~13)
+        const c2=["김규원","최서윤","이여빈","김민호","전예서","임남경"];
+        c2.forEach((n, i) => add(n, 200, 50 + i*75, seatCount++)); 
+
+        // 3열 (14~19)
+        const c3=["손준민","오주하","임세은","김은서","김민지","박리원"];
+        c3.forEach((n, i) => add(n, 295, 50 + i*75, seatCount++)); 
+
+        // 4열 (20~25)
+        const c4=["서휘찬","조유빈","김태림","손준서","황건우","천서영"];
+        c4.forEach((n, i) => add(n, 450, 50 + i*75, seatCount++)); 
+
+        set(ref(database, `academy/config/${currentClassIndex}`), { name: "의대반(101)", students });
+    }
+
+    function renderLogbook() {
+        const table = document.getElementById('logbookTable');
+        let html = `<thead><tr><th>구분</th>`;
+        CLASSES.forEach((cls, i) => html += `<th>${dbLayout[i]?.name || cls}</th>`);
+        html += `</tr></thead><tbody>`;
+
+        html += `<tr><td>총원</td>`;
+        CLASSES.forEach((cls, i) => {
+            const cnt = (dbLayout[i]?.students||[]).filter(s=>s.isVisible).length;
+            html += `<td>${cnt}</td>`;
+        });
+        html += `</tr>`;
+
+        [{t:'미등원', c:1}, {t:'조퇴', c:2}].forEach(type => {
+            html += `<tr><td>${type.t}</td>`;
+            CLASSES.forEach((cls, i) => {
+                const names = (dbLayout[i]?.students||[]).map((s, idx) => {
+                    const st = (dbLog[i]||{})[`day_${idx}`];
+                    return (s.isVisible && st===type.c) ? s.name : null;
+                }).filter(n=>n);
+                html += `<td>${names.length ? `<span style="color:red; font-size:0.8rem">${names.join(',')}</span>` : '-'}</td>`;
+            });
+            html += `</tr>`;
+        });
+
+        for(let p=1; p<=8; p++) {
+            html += `<tr><td>${p}교시</td>`;
+            CLASSES.forEach((cls, i) => {
+                const st = (dbLayout[i]?.students||[]);
+                let pres = 0, miss = [];
+                st.forEach((s, idx) => {
+                    if(!s.isVisible) return;
+                    const log = dbLog[i]||{};
+                    const d = log[`day_${idx}`]||0;
+                    const c = log[`p${p}_${idx}`]||0;
+                    if(d===1 || d===2 || c===3) { if(c===3) miss.push(s.name); }
+                    else pres++;
+                });
+                html += `<td><b>${pres}</b>${miss.length?`<br><small style="color:red">(${miss.join(',')})</small>`:''}</td>`;
+            });
+            html += `</tr>`;
+        }
+        table.innerHTML = html + `</tbody>`;
+    }
+
+    document.getElementById('modeLayout').onchange = renderSeats;
+    document.getElementById('modeEditName').onchange = renderSeats;
+</script>
+</body>
+</html>
     </nav>
 </div>
 
