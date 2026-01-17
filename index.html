@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>스마트 학원 관리 시스템</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
         /* --- 1. 기본 및 레이아웃 --- */
-        body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; padding-top: 110px; /* 헤더 공간 확보 */ }
+        body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; padding-top: 110px; overflow: hidden; /* 전체 스크롤 방지 */ }
         
-        /* 고정 헤더 영역 (시계 + 메인 탭) */
         .fixed-header {
             position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
             background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
@@ -21,7 +21,6 @@
         .app-title { font-weight: 800; font-size: 1.1rem; color: #1e293b; }
         .clock { font-weight: 600; color: #3b82f6; font-size: 0.9rem; }
 
-        /* 메인 네비게이션 탭 (출석 vs 대장) */
         .main-nav { display: flex; }
         .nav-btn {
             flex: 1; padding: 15px; border: none; background: white; 
@@ -30,15 +29,11 @@
         }
         .nav-btn.active { color: #3b82f6; border-bottom-color: #3b82f6; background: #f8fafc; }
 
-        /* 컨테이너 */
-        .container { max-width: 1000px; margin: 0 auto; padding: 15px; }
-        
-        /* 화면 전환용 (보임/숨김) */
-        .view-section { display: none; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 15px; height: calc(100vh - 110px); overflow-y: auto; }
+        .view-section { display: none; height: 100%; }
         .view-section.active { display: block; }
 
-        /* --- 2. 출석체크 화면 스타일 --- */
-        /* 교시 선택 바 */
+        /* --- 2. 출석체크 화면 --- */
         .control-panel { background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .period-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; margin-bottom: 10px; }
         .period-btn { 
@@ -49,7 +44,6 @@
         .period-btn.day-record { border-color: #ef4444; color: #ef4444; }
         .period-btn.day-record.active { background: #ef4444; color: white; }
 
-        /* 반 선택 탭 */
         .class-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
         .class-tab { 
             flex: 1; padding: 12px; background: #e2e8f0; border: none; border-radius: 8px; 
@@ -57,73 +51,74 @@
         }
         .class-tab.active { background: #3b82f6; color: white; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); }
 
-        /* 🔎 확대/축소 컨트롤 */
+        /* 줌 컨트롤 (숨김 가능하지만 표시해둠) */
         .zoom-controls { 
             display: flex; align-items: center; justify-content: flex-end; gap: 10px; 
             margin-bottom: 10px; background: #fff; padding: 8px 15px; border-radius: 20px; 
             border: 1px solid #e2e8f0; width: fit-content; margin-left: auto;
         }
-        .zoom-btn { background: #f1f5f9; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer; color: #333; }
+        .zoom-btn { background: #f1f5f9; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer; }
         input[type=range] { width: 100px; }
 
-        /* 💺 좌석 그리드 (드래그 & 줌 영역) */
+        /* 💺 좌석 컨테이너 (터치 이벤트 영역) */
         .seat-container {
-            overflow: auto; /* 드래그(스크롤) 가능 */
+            overflow: auto; 
             background: #e2e8f0;
             border-radius: 12px;
-            padding: 20px;
-            height: 60vh; /* 높이 고정 (스크롤 생기게) */
+            padding: 0; /* 패딩 제거하고 내부 wrapper에서 처리 */
+            height: 65vh; 
             position: relative;
-            touch-action: pan-x pan-y;
+            touch-action: none; /* 브라우저 기본 줌 방지 (우리가 직접 제어) */
+            display: flex; justify-content: center; align-items: flex-start;
         }
         
-        .seat-grid {
-            display: grid; gap: 10px; 
-            transform-origin: top left; /* 확대 시 왼쪽 위 기준 */
-            transition: transform 0.1s ease-out; /* 부드러운 줌 */
-            min-width: 600px; /* 최소 너비 확보 */
+        /* 실제 확대/축소 되는 래퍼 */
+        .zoom-wrapper {
+            padding: 40px;
+            transform-origin: top left;
+            transition: transform 0.05s linear; /* 딜레이 줄임 */
         }
 
-        /* 개별 좌석 디자인 (의대반 스타일 복원) */
+        .seat-grid {
+            display: grid; gap: 10px; 
+            min-width: 600px; 
+        }
+
         .seat {
             aspect-ratio: 1.2;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             background: white; border: 2px solid #cbd5e1; border-radius: 10px;
             cursor: pointer; user-select: none; position: relative;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            transition: all 0.1s;
+            /* 드래그 시 부드럽게 */
+            transition: border-color 0.2s, background-color 0.2s; 
         }
-        .seat-name { font-weight: 800; font-size: 1.1rem; color: #334155; margin-bottom: 4px; }
-        .seat-status { font-size: 0.8rem; font-weight: bold; color: #94a3b8; }
+        /* 드래그 중인 아이템 스타일 */
+        .sortable-ghost { opacity: 0.4; background: #c7d2fe; border: 2px dashed #4f46e5; }
+        .sortable-drag { opacity: 1; transform: scale(1.05); box-shadow: 0 10px 15px rgba(0,0,0,0.2); }
 
-        /* 상태별 색상 (디자인 복원) */
+        .seat-name { font-weight: 800; font-size: 1.1rem; color: #334155; margin-bottom: 4px; pointer-events: none; }
+        .seat-status { font-size: 0.8rem; font-weight: bold; color: #94a3b8; pointer-events: none; }
+
+        /* 상태 디자인 */
         .seat.present { border-color: #22c55e; color: #15803d; }
         .seat.present .seat-status { color: #16a34a; }
-
         .seat.absent { border-color: #ef4444; background: #fef2f2; }
         .seat.absent .seat-name { color: #b91c1c; }
         .seat.absent .seat-status { color: #dc2626; }
-
         .seat.early { border-color: #f59e0b; background: #fffbeb; }
         .seat.early .seat-status { color: #d97706; }
-
         .seat.missing { border-color: #64748b; background: #f1f5f9; opacity: 0.6; }
         .seat.missing .seat-name { text-decoration: line-through; color: #64748b; }
+        .seat.hidden-seat { visibility: hidden; }
+        .editing .seat.hidden-seat { visibility: visible; opacity: 0.5; border: 2px dashed #999; background: #eee;}
 
-        /* 숨김 좌석 */
-        .seat.hidden-seat { visibility: hidden; pointer-events: none; }
-        .editing .seat.hidden-seat { visibility: visible; opacity: 0.2; border: 2px dashed #999; pointer-events: auto; }
-
-
-        /* --- 3. 관리대장(표) 화면 스타일 --- */
-        .logbook-container { background: white; padding: 20px; border-radius: 12px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        /* --- 3. 관리대장 --- */
+        .logbook-container { background: white; padding: 20px; border-radius: 12px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 600px; font-size: 0.9rem; }
-        th, td { border: 1px solid #cbd5e1; padding: 10px 5px; text-align: center; vertical-align: middle; }
+        th, td { border: 1px solid #cbd5e1; padding: 10px 5px; text-align: center; }
         th { background: #f8fafc; color: #334155; font-weight: bold; }
-        .cell-cnt { font-size: 1.2rem; font-weight: 800; color: #1e293b; }
-        .cell-names { font-size: 0.8rem; color: #ef4444; margin-top: 4px; font-weight: bold; }
         
-        /* 기타 설정창 */
         .settings-bar { text-align: right; margin-top: 10px; display: none; background: #f0fdf4; padding:10px; border-radius:8px;}
         .settings-bar.show { display: block; }
         .btn-update { background: #475569; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
@@ -144,18 +139,15 @@
 </div>
 
 <div id="viewAttendance" class="view-section active container">
-    
     <div class="control-panel">
         <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
             <div id="periodInfo" style="font-size:0.9rem; font-weight:bold; color:#333;">전체 기록 모드</div>
             <div style="font-size:0.8rem;">
                 <label><input type="checkbox" id="modeEditName"> 이름수정</label>
-                <label style="color:blue; margin-left:10px;"><input type="checkbox" id="modeLayout"> 자리배치</label>
+                <label style="color:blue; margin-left:10px; font-weight:bold;"><input type="checkbox" id="modeLayout"> 🏗️자리배치(드래그)</label>
             </div>
         </div>
-        
-        <div class="period-scroll" id="periodBtns">
-            </div>
+        <div class="period-scroll" id="periodBtns"></div>
     </div>
 
     <div class="class-tabs" id="classTabs"></div>
@@ -169,13 +161,15 @@
 
     <div class="zoom-controls">
         <button class="zoom-btn" onclick="updateZoom(-0.1)">-</button>
-        <input type="range" id="zoomRange" min="0.5" max="1.5" step="0.1" value="1.0" oninput="setZoom(this.value)">
+        <input type="range" id="zoomRange" min="0.5" max="2.0" step="0.05" value="1.0" oninput="setZoom(this.value)">
         <button class="zoom-btn" onclick="updateZoom(0.1)">+</button>
     </div>
 
-    <div class="seat-container">
-        <div id="seatGrid" class="seat-grid">
-            <div style="text-align:center; padding:50px; color:#666;">데이터를 불러오는 중...</div>
+    <div class="seat-container" id="seatContainer">
+        <div class="zoom-wrapper" id="zoomWrapper">
+            <div id="seatGrid" class="seat-grid">
+                <div style="text-align:center; padding:50px; color:#666;">데이터를 불러오는 중...</div>
+            </div>
         </div>
     </div>
 </div>
@@ -183,8 +177,7 @@
 <div id="viewLogbook" class="view-section container">
     <div class="logbook-container">
         <div style="font-size:1.1rem; font-weight:bold; margin-bottom:15px; color:#1e293b;">📋 실시간 출석 현황표</div>
-        <table id="logbookTable">
-            </table>
+        <table id="logbookTable"></table>
     </div>
 </div>
 
@@ -206,106 +199,125 @@
     const app = initializeApp(firebaseConfig);
     const database = getDatabase(app);
 
-    // --- 전역 변수 ---
     const CLASSES = ['의대반(101)', 'B반', 'C반', 'D반', 'E반', 'F반'];
     let currentClassIndex = 0;
     let currentPeriod = 'day'; 
-    let todayStr = new Date().toISOString().split('T')[0]; // 로컬시간 보정은 아래 함수에서
+    let todayStr = "";
     let currentZoom = 1.0;
+    let sortableInstance = null; // 드래그 앤 드롭 인스턴스
 
     let dbLayout = {}; 
     let dbLog = {};    
 
-    // --- 시계 및 날짜 ---
+    // --- 시계 & 초기화 ---
     function updateClock() {
         const now = new Date();
         const options = { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' };
         document.getElementById('seoulClock').innerText = now.toLocaleString('ko-KR', options);
         
-        // 날짜 갱신 (자정 넘어가면 바뀜)
         const offset = now.getTimezoneOffset() * 60000;
         const krTime = new Date(now.getTime() + offset + (9 * 60 * 60 * 1000));
         todayStr = krTime.toISOString().split('T')[0];
     }
     setInterval(updateClock, 1000); updateClock();
 
-    // --- 화면 전환 (탭) ---
     window.switchView = (viewName) => {
         document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-        
         if(viewName === 'attendance') {
             document.getElementById('viewAttendance').classList.add('active');
             document.querySelectorAll('.nav-btn')[0].classList.add('active');
         } else {
             document.getElementById('viewLogbook').classList.add('active');
             document.querySelectorAll('.nav-btn')[1].classList.add('active');
-            renderLogbook(); // 대장 화면 열 때 표 갱신
+            renderLogbook();
         }
     };
 
-    // --- 확대/축소 로직 ---
+    // --- ✋ 핀치 줌 (Pinch Zoom) 로직 ---
+    const seatContainer = document.getElementById('seatContainer');
+    const zoomWrapper = document.getElementById('zoomWrapper');
+    let initialDistance = 0;
+    let initialZoom = 1.0;
+
+    seatContainer.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault(); // 브라우저 기본 줌 방지
+            initialDistance = getDistance(e.touches);
+            initialZoom = currentZoom;
+        }
+    }, { passive: false });
+
+    seatContainer.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const currentDistance = getDistance(e.touches);
+            if (initialDistance > 0) {
+                const scaleChange = currentDistance / initialDistance;
+                let newZoom = initialZoom * scaleChange;
+                // 한계 설정
+                if (newZoom < 0.5) newZoom = 0.5;
+                if (newZoom > 2.0) newZoom = 2.0;
+                setZoom(newZoom);
+            }
+        }
+    }, { passive: false });
+
+    function getDistance(touches) {
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
     window.setZoom = (val) => {
         currentZoom = parseFloat(val);
         document.getElementById('zoomRange').value = currentZoom;
-        document.getElementById('seatGrid').style.transform = `scale(${currentZoom})`;
-    };
-    window.updateZoom = (delta) => {
-        let newZoom = currentZoom + delta;
-        if(newZoom < 0.5) newZoom = 0.5;
-        if(newZoom > 1.5) newZoom = 1.5;
-        setZoom(newZoom);
-    };
-
-    // --- Firebase 데이터 리스너 ---
-    const layoutRef = ref(database, 'academy/config');
-    onValue(layoutRef, (snapshot) => {
-        dbLayout = snapshot.val() || initLayoutDB();
-        renderSeats(); renderLogbook();
-    });
-
-    const logRef = ref(database, `academy/logs/${todayStr}`);
-    onValue(logRef, (snapshot) => {
-        dbLog = snapshot.val() || {};
-        renderSeats(); renderLogbook();
-    });
-
-    function initLayoutDB() { return {}; } // 데이터 없으면 빈 객체 (초기화는 아래 버튼에서)
-
-    // --- UI 렌더링: 교시 버튼 ---
-    const periodContainer = document.getElementById('periodBtns');
-    function renderPeriodBtns() {
-        periodContainer.innerHTML = '';
+        zoomWrapper.style.transform = `scale(${currentZoom})`;
+        // 줌 했을 때 원점 조정 (왼쪽 위 기준)
+        zoomWrapper.style.transformOrigin = "top left";
         
-        // 전체 명단 버튼
+        // 컨테이너 크기 재계산 (스크롤 영역 확보)
+        const gridW = document.getElementById('seatGrid').offsetWidth;
+        const gridH = document.getElementById('seatGrid').offsetHeight;
+        zoomWrapper.style.width = `${gridW}px`;
+        zoomWrapper.style.height = `${gridH}px`;
+    };
+    window.updateZoom = (delta) => setZoom(Math.max(0.5, Math.min(2.0, currentZoom + delta)));
+
+
+    // --- Firebase Data ---
+    const layoutRef = ref(database, 'academy/config');
+    onValue(layoutRef, (snapshot) => { dbLayout = snapshot.val() || {}; renderSeats(); renderLogbook(); });
+    const logRef = ref(database, `academy/logs/${todayStr}`);
+    onValue(logRef, (snapshot) => { dbLog = snapshot.val() || {}; renderSeats(); renderLogbook(); });
+
+
+    // --- UI Render ---
+    function renderPeriodBtns() {
+        const container = document.getElementById('periodBtns');
+        container.innerHTML = '';
         const btnDay = document.createElement('button');
         btnDay.className = `period-btn day-record ${currentPeriod === 'day' ? 'active' : ''}`;
         btnDay.innerText = '전체명단(결석/조퇴)';
         btnDay.onclick = () => { currentPeriod = 'day'; renderUI(); };
-        periodContainer.appendChild(btnDay);
+        container.appendChild(btnDay);
 
-        // 1~8교시 버튼
         for(let i=1; i<=8; i++) {
             const btn = document.createElement('button');
             btn.className = `period-btn ${currentPeriod === String(i) ? 'active' : ''}`;
             btn.innerText = `${i}교시`;
             btn.onclick = () => { currentPeriod = String(i); renderUI(); };
-            periodContainer.appendChild(btn);
+            container.appendChild(btn);
         }
-        
-        // 안내 문구
-        const info = document.getElementById('periodInfo');
-        info.innerText = currentPeriod === 'day' 
+        document.getElementById('periodInfo').innerText = currentPeriod === 'day' 
             ? "📢 전체 기록: 오늘 결석/조퇴자를 체크하세요." 
-            : `📢 ${currentPeriod}교시: 현재 자리에 없는 학생을 체크하세요.`;
+            : `📢 ${currentPeriod}교시: 자리에 없는 학생 체크`;
     }
 
-    // --- UI 렌더링: 좌석표 ---
     function renderSeats() {
         const gridEl = document.getElementById('seatGrid');
         const tabsEl = document.getElementById('classTabs');
         
-        // 반 탭 생성
         tabsEl.innerHTML = '';
         CLASSES.forEach((cls, idx) => {
             const btn = document.createElement('button');
@@ -318,9 +330,10 @@
         const layout = dbLayout[currentClassIndex];
         if(!layout) return;
 
-        // 배치 모드 UI 처리
         const isLayoutMode = document.getElementById('modeLayout').checked;
         const layoutControls = document.getElementById('layoutControls');
+        
+        // 모드에 따른 UI 처리
         if(isLayoutMode) {
             layoutControls.classList.add('show');
             gridEl.classList.add('editing');
@@ -329,39 +342,33 @@
             layoutControls.classList.remove('show');
             gridEl.classList.remove('editing');
         }
+
         document.getElementById('colsInput').value = layout.cols;
         document.getElementById('rowsInput').value = layout.rows;
-
-        // 그리드 스타일
         gridEl.innerHTML = '';
         gridEl.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
 
         // 좌석 생성
         layout.students.forEach((student, seatIdx) => {
             const seat = document.createElement('div');
-            let status = 0; // 0:출석, 1:결석, 2:조퇴, 3:이석
-            let statusText = "출석";
-            let statusClass = "present";
+            seat.setAttribute('data-id', seatIdx); // 정렬을 위해 ID 부여
 
-            // 상태 계산
+            let status = 0; 
             const classLog = dbLog[currentClassIndex] || {};
             const dayStatus = classLog[`day_${seatIdx}`] || 0;
             
-            if(currentPeriod === 'day') {
-                status = dayStatus;
-            } else {
-                // 교시 모드
-                if(dayStatus === 1) status = 1; // 결석
-                else if(dayStatus === 2) status = 2; // 조퇴
+            if(currentPeriod === 'day') status = dayStatus;
+            else {
+                if(dayStatus === 1) status = 1; 
+                else if(dayStatus === 2) status = 2; 
                 else status = classLog[`p${currentPeriod}_${seatIdx}`] || 0;
             }
 
-            // 클래스 및 텍스트 결정
+            let statusClass = "present", statusText = "출석";
             if(status === 1) { statusClass = "absent"; statusText = "결석"; }
             else if(status === 2) { statusClass = "early"; statusText = "조퇴"; }
             else if(status === 3) { statusClass = "missing"; statusText = "이석"; }
             
-            // 디자인: 출석(0)일때는 깔끔하게
             seat.className = `seat ${statusClass}`;
             if(student.isVisible === false) seat.classList.add('hidden-seat');
 
@@ -370,13 +377,56 @@
                 ${student.isVisible ? `<div class="seat-status">${statusText}</div>` : ''}
             `;
 
-            seat.onclick = () => handleSeatClick(seatIdx, student);
+            // 클릭 이벤트 (드래그 모드 아닐 때만)
+            seat.onmousedown = (e) => {
+                 if(!isLayoutMode) handleSeatClick(seatIdx, student);
+            };
+            // 터치 디바이스 대응
+            seat.ontouchend = (e) => {
+                 // 드래그 중이 아니었다면 클릭으로 간주
+                 if(!isLayoutMode) handleSeatClick(seatIdx, student);
+            };
+
             gridEl.appendChild(seat);
         });
+
+        // --- 🏗️ 드래그 앤 드롭 (SortableJS) 적용 ---
+        if (sortableInstance) sortableInstance.destroy(); // 기존 인스턴스 제거
+        
+        if (isLayoutMode) {
+            sortableInstance = new Sortable(gridEl, {
+                animation: 150,
+                delay: 100, // 터치 실수 방지용 딜레이
+                delayOnTouchOnly: true,
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                onEnd: function (evt) {
+                    const oldIdx = evt.oldIndex;
+                    const newIdx = evt.newIndex;
+                    if (oldIdx === newIdx) return;
+
+                    // 데이터 배열 재정렬
+                    const currentStudents = [...dbLayout[currentClassIndex].students];
+                    const [movedItem] = currentStudents.splice(oldIdx, 1);
+                    currentStudents.splice(newIdx, 0, movedItem);
+
+                    // Firebase 저장
+                    set(ref(database, `academy/config/${currentClassIndex}/students`), currentStudents);
+                    // 로그 데이터도 같이 이동해야 하나? -> 보통 자리배치는 사람만 이동함. 로그는 자리 번호 기준이라 꼬일 수 있음.
+                    // ★ 중요: 여기서는 "사람(이름/속성)"만 이동하고, "자리 번호에 매핑된 로그"는 그대로 둠.
+                    // 즉, 철수가 1번자리(출석)에서 2번자리(결석)로 가면 2번자리의 상태를 따라감. 
+                    // 이게 싫으면 로그도 같이 swap 해야하는데, 복잡도 증가. 현재는 자리배치 변경 -> 사람 이동으로 처리.
+                }
+            });
+        }
     }
 
     function handleSeatClick(seatIdx, student) {
+        // 드래그 앤 드롭 중 클릭 방지 등은 상위에서 처리됨
         if(document.getElementById('modeLayout').checked) {
+            // 레이아웃 모드에서 "클릭"은 숨김/보임 토글 (드래그 안하고 클릭만 했을때)
+            // SortableJS가 클릭을 먹어버릴 수도 있어서, 별도 처리 필요하지만
+            // 여기서는 "빈공간 만들기" 기능을 위해 클릭 유지
             const newData = {...student, isVisible: !(student.isVisible ?? true)};
             if(newData.isVisible) newData.name = "빈자리";
             const updated = [...dbLayout[currentClassIndex].students];
@@ -384,6 +434,7 @@
             set(ref(database, `academy/config/${currentClassIndex}/students`), updated);
             return;
         }
+
         if(document.getElementById('modeEditName').checked) {
             if(student.isVisible === false) return;
             const newName = prompt("이름 변경:", student.name);
@@ -393,59 +444,52 @@
         
         if(student.isVisible === false) return;
 
-        // 출석 체크 로직
+        // 출석 체크
         const classLog = dbLog[currentClassIndex] || {};
         let nextStatus = 0;
-
         if(currentPeriod === 'day') {
             const curr = classLog[`day_${seatIdx}`] || 0;
-            nextStatus = (curr + 1) % 3; // 0->1->2->0
+            nextStatus = (curr + 1) % 3; 
             set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/day_${seatIdx}`), nextStatus);
         } else {
             const dayStatus = classLog[`day_${seatIdx}`] || 0;
-            if(dayStatus !== 0) { alert("결석/조퇴자는 수정할 수 없습니다."); return; }
+            if(dayStatus !== 0) { alert("결석/조퇴자는 수정불가"); return; }
             const curr = classLog[`p${currentPeriod}_${seatIdx}`] || 0;
-            nextStatus = (curr === 0) ? 3 : 0; // 0 <-> 3
+            nextStatus = (curr === 0) ? 3 : 0;
             set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/p${currentPeriod}_${seatIdx}`), nextStatus);
         }
     }
 
-    // --- UI 렌더링: 관리 대장 ---
     function renderLogbook() {
         const table = document.getElementById('logbookTable');
         let html = `<thead><tr><th>구분</th>`;
-        CLASSES.forEach((cls, idx) => {
-            html += `<th>${dbLayout[idx]?.name || cls}</th>`;
-        });
+        CLASSES.forEach((cls, idx) => { html += `<th>${dbLayout[idx]?.name || cls}</th>`; });
         html += `</tr></thead><tbody>`;
 
-        // 1. 총원
         html += `<tr><td>총원</td>`;
         CLASSES.forEach((cls, idx) => {
             const cnt = (dbLayout[idx]?.students || []).filter(s => s.isVisible !== false && s.name !== "빈자리").length;
-            html += `<td class="cell-cnt">${cnt}</td>`;
+            html += `<td style="font-weight:bold;">${cnt}</td>`;
         });
         html += `</tr>`;
 
-        // 2. 결석/조퇴
         const types = [ {label:'미등원<br>(결석)', code:1}, {label:'조퇴', code:2} ];
         types.forEach(type => {
             html += `<tr><td>${type.label}</td>`;
             CLASSES.forEach((cls, idx) => {
-                const names = getNames(idx, 'day', type.code);
-                html += `<td>${names.length ? `<span class="cell-names">${names.join(', ')}</span>` : '-'}</td>`;
+                const names = getNames(idx, type.code);
+                html += `<td>${names.length ? `<span style="color:red; font-size:0.8rem; font-weight:bold;">${names.join(', ')}</span>` : '-'}</td>`;
             });
             html += `</tr>`;
         });
 
-        // 3. 교시별 현황
         for(let i=1; i<=8; i++) {
             html += `<tr><td>${i}교시</td>`;
             CLASSES.forEach((cls, idx) => {
                 const stats = getPeriodStats(idx, i);
                 html += `<td>
-                    <span class="cell-cnt">${stats.present}</span>
-                    ${stats.missing.length ? `<span class="cell-names">(${stats.missing.join(',')})</span>` : ''}
+                    <span style="font-size:1.1rem; font-weight:800;">${stats.present}</span>
+                    ${stats.missing.length ? `<span style="display:block; font-size:0.75rem; color:red;">(${stats.missing.join(',')})</span>` : ''}
                 </td>`;
             });
             html += `</tr>`;
@@ -454,7 +498,7 @@
         table.innerHTML = html;
     }
 
-    function getNames(cIdx, mode, code) {
+    function getNames(cIdx, code) {
         const students = dbLayout[cIdx]?.students || [];
         const log = dbLog[cIdx] || {};
         return students.map((s, i) => {
@@ -467,36 +511,24 @@
     function getPeriodStats(cIdx, p) {
         const students = dbLayout[cIdx]?.students || [];
         const log = dbLog[cIdx] || {};
-        let present = 0;
-        let missing = [];
-
+        let present = 0; let missing = [];
         students.forEach((s, i) => {
             if(s.isVisible===false || s.name==="빈자리") return;
             const dStat = log[`day_${i}`] || 0;
             const pStat = log[`p${p}_${i}`] || 0;
-            
-            // 자리에 없는 경우: 결석(1), 조퇴(2), 이석(3)
             if(dStat === 1 || dStat === 2 || pStat === 3) {
-                // 표에는 이석자만 이름 표시 (결석자는 위에서 표시했으므로)
                 if(pStat === 3) missing.push(s.name);
-            } else {
-                present++;
-            }
+            } else { present++; }
         });
         return { present, missing };
     }
 
-    // --- 통합 렌더링 함수 ---
-    function renderUI() {
-        renderPeriodBtns();
-        renderSeats();
-    }
-
-    // --- 이벤트 바인딩 ---
+    function renderUI() { renderPeriodBtns(); renderSeats(); }
+    
+    // Event Listeners
     document.getElementById('modeLayout').addEventListener('change', renderSeats);
     document.getElementById('modeEditName').addEventListener('change', renderSeats);
     
-    // 초기화 버튼들
     document.getElementById('btnResize').onclick = () => {
         const c = document.getElementById('colsInput').value;
         const r = document.getElementById('rowsInput').value;
@@ -508,7 +540,6 @@
         }
     }
     
-    // 의대반 Preset
     document.getElementById('btnLoadMedical').onclick = () => {
         if(!confirm("의대반 배치로 되돌리시겠습니까?")) return;
         const ROWS=7, COLS=6;
