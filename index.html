@@ -2,143 +2,197 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스마트 학원 관리 대장</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>스마트 학원 관리 시스템</title>
     <style>
-        /* --- 기본 스타일 --- */
-        body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background-color: #f3f4f6; margin: 0; padding: 10px; padding-top: 50px; }
+        /* --- 1. 기본 및 레이아웃 --- */
+        body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; padding-top: 110px; /* 헤더 공간 확보 */ }
         
-        /* 상단 시계 영역 */
-        .header-bar {
-            position: fixed; top: 0; left: 0; width: 100%; height: 50px;
-            background: #fff; border-bottom: 1px solid #ddd;
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 0 20px; box-sizing: border-box; z-index: 1000;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        /* 고정 헤더 영역 (시계 + 메인 탭) */
+        .fixed-header {
+            position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
+            background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
-        .header-title { font-weight: bold; font-size: 1.1rem; color: #333; }
-        .header-clock { font-weight: bold; color: #2563eb; font-size: 0.9rem; }
+        
+        .top-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 20px; border-bottom: 1px solid #e2e8f0; height: 50px; box-sizing: border-box;
+        }
+        .app-title { font-weight: 800; font-size: 1.1rem; color: #1e293b; }
+        .clock { font-weight: 600; color: #3b82f6; font-size: 0.9rem; }
 
-        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 50px;}
+        /* 메인 네비게이션 탭 (출석 vs 대장) */
+        .main-nav { display: flex; }
+        .nav-btn {
+            flex: 1; padding: 15px; border: none; background: white; 
+            font-size: 1rem; font-weight: bold; color: #64748b; cursor: pointer;
+            border-bottom: 3px solid transparent; transition: all 0.2s;
+        }
+        .nav-btn.active { color: #3b82f6; border-bottom-color: #3b82f6; background: #f8fafc; }
 
-        /* --- 컨트롤 패널 (교시 선택) --- */
-        .control-panel { margin-bottom: 20px; padding: 10px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; }
-        .period-selector { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 5px; margin-bottom: 10px; }
+        /* 컨테이너 */
+        .container { max-width: 1000px; margin: 0 auto; padding: 15px; }
+        
+        /* 화면 전환용 (보임/숨김) */
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+
+        /* --- 2. 출석체크 화면 스타일 --- */
+        /* 교시 선택 바 */
+        .control-panel { background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .period-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; margin-bottom: 10px; }
         .period-btn { 
-            padding: 8px 12px; border: 1px solid #cbd5e1; background: white; 
-            border-radius: 20px; cursor: pointer; font-size: 0.9rem; white-space: nowrap; 
-            transition: all 0.2s;
+            padding: 8px 14px; border: 1px solid #cbd5e1; background: white; 
+            border-radius: 20px; font-size: 0.9rem; white-space: nowrap; cursor: pointer;
         }
         .period-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; font-weight: bold; }
         .period-btn.day-record { border-color: #ef4444; color: #ef4444; }
         .period-btn.day-record.active { background: #ef4444; color: white; }
 
         /* 반 선택 탭 */
-        .tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
-        .tab-btn { flex: 1; padding: 10px; border: none; background: #e5e7eb; cursor: pointer; border-radius: 8px; font-weight: bold; min-width: 60px; white-space: nowrap; font-size: 0.9rem;}
-        .tab-btn.active { background: #3b82f6; color: white; }
-
-        /* --- 좌석 그리드 --- */
-        .seat-grid-wrapper { overflow-x: auto; padding-bottom: 5px; margin-top: 10px; border-radius: 10px; background: #eee; border: 1px solid #ddd; }
-        .seat-grid { display: grid; gap: 6px; padding: 10px; min-width: 600px; }
-        
-        .seat {
-            aspect-ratio: 1.3; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            border: 2px solid #ccc; border-radius: 6px; cursor: pointer; user-select: none;
-            background: white; padding: 2px; text-align: center; position: relative; transition: all 0.1s;
+        .class-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
+        .class-tab { 
+            flex: 1; padding: 12px; background: #e2e8f0; border: none; border-radius: 8px; 
+            font-weight: bold; color: #64748b; min-width: 70px; cursor: pointer; white-space: nowrap;
         }
-        .seat-name { font-weight: bold; font-size: 1rem; line-height: 1.2; }
-        .seat-status { font-size: 0.75rem; margin-top: 2px; }
+        .class-tab.active { background: #3b82f6; color: white; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); }
 
-        /* 상태별 색상 (전체기록용) */
-        .seat.absent { border-color: #dc2626; background-color: #fef2f2; color: #991b1b; } 
-        .seat.early { border-color: #d97706; background-color: #fffbeb; color: #92400e; }
+        /* 🔎 확대/축소 컨트롤 */
+        .zoom-controls { 
+            display: flex; align-items: center; justify-content: flex-end; gap: 10px; 
+            margin-bottom: 10px; background: #fff; padding: 8px 15px; border-radius: 20px; 
+            border: 1px solid #e2e8f0; width: fit-content; margin-left: auto;
+        }
+        .zoom-btn { background: #f1f5f9; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer; color: #333; }
+        input[type=range] { width: 100px; }
+
+        /* 💺 좌석 그리드 (드래그 & 줌 영역) */
+        .seat-container {
+            overflow: auto; /* 드래그(스크롤) 가능 */
+            background: #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            height: 60vh; /* 높이 고정 (스크롤 생기게) */
+            position: relative;
+            touch-action: pan-x pan-y;
+        }
         
-        /* 상태별 색상 (교시별) */
-        .seat.missing { border-color: #6b7280; background-color: #f3f4f6; color: #6b7280; opacity: 0.7; } /* 자리에 없음 */
+        .seat-grid {
+            display: grid; gap: 10px; 
+            transform-origin: top left; /* 확대 시 왼쪽 위 기준 */
+            transition: transform 0.1s ease-out; /* 부드러운 줌 */
+            min-width: 600px; /* 최소 너비 확보 */
+        }
 
-        .seat.present { border-color: #059669; background-color: #ecfdf5; color: #065f46; } /* 출석 */
+        /* 개별 좌석 디자인 (의대반 스타일 복원) */
+        .seat {
+            aspect-ratio: 1.2;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: white; border: 2px solid #cbd5e1; border-radius: 10px;
+            cursor: pointer; user-select: none; position: relative;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.1s;
+        }
+        .seat-name { font-weight: 800; font-size: 1.1rem; color: #334155; margin-bottom: 4px; }
+        .seat-status { font-size: 0.8rem; font-weight: bold; color: #94a3b8; }
 
+        /* 상태별 색상 (디자인 복원) */
+        .seat.present { border-color: #22c55e; color: #15803d; }
+        .seat.present .seat-status { color: #16a34a; }
+
+        .seat.absent { border-color: #ef4444; background: #fef2f2; }
+        .seat.absent .seat-name { color: #b91c1c; }
+        .seat.absent .seat-status { color: #dc2626; }
+
+        .seat.early { border-color: #f59e0b; background: #fffbeb; }
+        .seat.early .seat-status { color: #d97706; }
+
+        .seat.missing { border-color: #64748b; background: #f1f5f9; opacity: 0.6; }
+        .seat.missing .seat-name { text-decoration: line-through; color: #64748b; }
+
+        /* 숨김 좌석 */
         .seat.hidden-seat { visibility: hidden; pointer-events: none; }
-        .editing .seat.hidden-seat { visibility: visible; opacity: 0.3; background: #999; border: 1px dashed #666; pointer-events: auto; }
+        .editing .seat.hidden-seat { visibility: visible; opacity: 0.2; border: 2px dashed #999; pointer-events: auto; }
 
-        /* --- 관리 대장 (표) 스타일 --- */
-        .logbook-section { margin-top: 40px; border-top: 2px dashed #ccc; padding-top: 20px; }
-        .logbook-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 10px; color: #1e293b; }
-        .table-wrapper { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 600px; }
-        th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: center; vertical-align: middle; }
-        th { background: #f1f5f9; font-weight: bold; color: #334155; }
+
+        /* --- 3. 관리대장(표) 화면 스타일 --- */
+        .logbook-container { background: white; padding: 20px; border-radius: 12px; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; font-size: 0.9rem; }
+        th, td { border: 1px solid #cbd5e1; padding: 10px 5px; text-align: center; vertical-align: middle; }
+        th { background: #f8fafc; color: #334155; font-weight: bold; }
+        .cell-cnt { font-size: 1.2rem; font-weight: 800; color: #1e293b; }
+        .cell-names { font-size: 0.8rem; color: #ef4444; margin-top: 4px; font-weight: bold; }
         
-        /* 표 내부 스타일 */
-        .cell-count { font-size: 1.1rem; font-weight: bold; color: #333; display: block; }
-        .cell-names { font-size: 0.75rem; color: #dc2626; margin-top: 4px; display: block; line-height: 1.2; }
-        .row-header { background: #f8fafc; font-weight: bold; width: 60px; }
-        
-        /* 버튼들 */
-        .btn-group { display: flex; gap: 10px; margin-top: 10px; justify-content: flex-end; }
-        .btn-update { background: #4b5563; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
-        .btn-medical { background: #4f46e5; color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
-        
-        .layout-controls { background: #f0fdf4; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; text-align: right;}
-        .layout-controls.show { display: block; }
-        .switch-group { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-bottom: 10px;}
+        /* 기타 설정창 */
+        .settings-bar { text-align: right; margin-top: 10px; display: none; background: #f0fdf4; padding:10px; border-radius:8px;}
+        .settings-bar.show { display: block; }
+        .btn-update { background: #475569; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+        .btn-reset { background: #4f46e5; color: white; padding: 8px 15px; border-radius: 6px; border:none; font-weight:bold; cursor:pointer;}
     </style>
 </head>
 <body>
 
-<div class="header-bar">
-    <div class="header-title">📅 학원생 관리 대장</div>
-    <div class="header-clock" id="seoulClock">로딩중...</div>
+<div class="fixed-header">
+    <div class="top-bar">
+        <div class="app-title">🏫 스마트 학원 관리</div>
+        <div class="clock" id="seoulClock">00:00</div>
+    </div>
+    <nav class="main-nav">
+        <button class="nav-btn active" onclick="switchView('attendance')">📋 출석 체크</button>
+        <button class="nav-btn" onclick="switchView('logbook')">📊 관리 대장</button>
+    </nav>
 </div>
 
-<div class="container">
+<div id="viewAttendance" class="view-section active container">
+    
     <div class="control-panel">
-        <div class="switch-group">
-            <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
-                <input type="checkbox" id="modeEditName"> 📝이름수정
-            </label>
-            <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; color:blue;">
-                <input type="checkbox" id="modeLayout"> 🏗️자리배치
-            </label>
-        </div>
-
-        <div class="period-selector" id="periodSelector">
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+            <div id="periodInfo" style="font-size:0.9rem; font-weight:bold; color:#333;">전체 기록 모드</div>
+            <div style="font-size:0.8rem;">
+                <label><input type="checkbox" id="modeEditName"> 이름수정</label>
+                <label style="color:blue; margin-left:10px;"><input type="checkbox" id="modeLayout"> 자리배치</label>
             </div>
-        <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">
-            📢 <span id="periodInfoText">전체 기록 모드: 결석/조퇴자를 체크하세요.</span>
         </div>
+        
+        <div class="period-scroll" id="periodBtns">
+            </div>
     </div>
 
-    <div class="tabs" id="classTabs"></div>
+    <div class="class-tabs" id="classTabs"></div>
 
-    <div id="layoutControls" class="layout-controls">
-        가로: <input type="number" id="colsInput" min="1" max="10" style="width:40px;"> 
-        세로: <input type="number" id="rowsInput" min="1" max="15" style="width:40px;"> 
-        <button class="btn-update" id="btnResize">칸수변경</button>
-        <button class="btn-medical" id="btnLoadMedical" style="margin-left:10px;">📸의대반(101) 초기화</button>
+    <div id="layoutControls" class="settings-bar">
+        가로: <input type="number" id="colsInput" style="width:40px;"> 
+        세로: <input type="number" id="rowsInput" style="width:40px;"> 
+        <button class="btn-update" id="btnResize">변경</button>
+        <button class="btn-reset" id="btnLoadMedical" style="margin-left:10px;">📸의대반 초기화</button>
     </div>
 
-    <div class="seat-grid-wrapper">
+    <div class="zoom-controls">
+        <button class="zoom-btn" onclick="updateZoom(-0.1)">-</button>
+        <input type="range" id="zoomRange" min="0.5" max="1.5" step="0.1" value="1.0" oninput="setZoom(this.value)">
+        <button class="zoom-btn" onclick="updateZoom(0.1)">+</button>
+    </div>
+
+    <div class="seat-container">
         <div id="seatGrid" class="seat-grid">
-            <div style="text-align:center; padding:20px;">데이터 로딩중...</div>
+            <div style="text-align:center; padding:50px; color:#666;">데이터를 불러오는 중...</div>
         </div>
     </div>
+</div>
 
-    <div class="logbook-section">
-        <div class="logbook-title">📋 실시간 관리 대장 (자동작성)</div>
-        <div class="table-wrapper">
-            <table id="logbookTable">
-                </table>
-        </div>
+<div id="viewLogbook" class="view-section container">
+    <div class="logbook-container">
+        <div style="font-size:1.1rem; font-weight:bold; margin-bottom:15px; color:#1e293b;">📋 실시간 출석 현황표</div>
+        <table id="logbookTable">
+            </table>
     </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-    import { getDatabase, ref, onValue, set, get } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-    // 🔴 [중요] 여기에 선생님 Firebase 키값을 붙여넣으세요! 🔴
+    // 🔴 [중요] 선생님의 Firebase 키값을 여기에 붙여넣으세요 🔴
     const firebaseConfig = {
         apiKey: "AIzaSyAGdK_AGLtW0DpTvJ3KKrdfq_InIBUI-lY",
         authDomain: "attendence-e9aa8.firebaseapp.com",
@@ -155,182 +209,165 @@
     // --- 전역 변수 ---
     const CLASSES = ['의대반(101)', 'B반', 'C반', 'D반', 'E반', 'F반'];
     let currentClassIndex = 0;
-    let currentPeriod = 'day'; // 'day'(전체), '1', '2' ... '8'
-    let todayStr = getTodayString();
-    
-    // 데이터 저장소
-    let dbLayout = {}; // 학생 이름, 자리배치 (고정값)
-    let dbLog = {};    // 오늘 날짜의 출석기록 (변동값)
+    let currentPeriod = 'day'; 
+    let todayStr = new Date().toISOString().split('T')[0]; // 로컬시간 보정은 아래 함수에서
+    let currentZoom = 1.0;
 
-    // --- DOM 요소 ---
-    const clockEl = document.getElementById('seoulClock');
-    const periodSelectorEl = document.getElementById('periodSelector');
-    const infoTextEl = document.getElementById('periodInfoText');
-    const gridEl = document.getElementById('seatGrid');
-    const tabsEl = document.getElementById('classTabs');
-    const logbookTableEl = document.getElementById('logbookTable');
-    const chkEditName = document.getElementById('modeEditName');
-    const chkLayout = document.getElementById('modeLayout');
-    const layoutControls = document.getElementById('layoutControls');
+    let dbLayout = {}; 
+    let dbLog = {};    
 
-    // --- 1. 시계 기능 ---
+    // --- 시계 및 날짜 ---
     function updateClock() {
         const now = new Date();
-        const options = { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-        clockEl.innerText = now.toLocaleString('ko-KR', options);
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    function getTodayString() {
-        // 한국 시간 기준 날짜 문자열 생성 (YYYY-MM-DD)
-        const now = new Date();
-        const offset = now.getTimezoneOffset() * 60000;
-        const krTime = new Date(now.getTime() + offset + (9 * 60 * 60 * 1000)); 
-        return krTime.toISOString().split('T')[0];
-    }
-
-    // --- 2. 교시 선택 버튼 생성 ---
-    function renderPeriodButtons() {
-        periodSelectorEl.innerHTML = '';
+        const options = { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' };
+        document.getElementById('seoulClock').innerText = now.toLocaleString('ko-KR', options);
         
-        // 전체 기록 (결석/조퇴)
+        // 날짜 갱신 (자정 넘어가면 바뀜)
+        const offset = now.getTimezoneOffset() * 60000;
+        const krTime = new Date(now.getTime() + offset + (9 * 60 * 60 * 1000));
+        todayStr = krTime.toISOString().split('T')[0];
+    }
+    setInterval(updateClock, 1000); updateClock();
+
+    // --- 화면 전환 (탭) ---
+    window.switchView = (viewName) => {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+        
+        if(viewName === 'attendance') {
+            document.getElementById('viewAttendance').classList.add('active');
+            document.querySelectorAll('.nav-btn')[0].classList.add('active');
+        } else {
+            document.getElementById('viewLogbook').classList.add('active');
+            document.querySelectorAll('.nav-btn')[1].classList.add('active');
+            renderLogbook(); // 대장 화면 열 때 표 갱신
+        }
+    };
+
+    // --- 확대/축소 로직 ---
+    window.setZoom = (val) => {
+        currentZoom = parseFloat(val);
+        document.getElementById('zoomRange').value = currentZoom;
+        document.getElementById('seatGrid').style.transform = `scale(${currentZoom})`;
+    };
+    window.updateZoom = (delta) => {
+        let newZoom = currentZoom + delta;
+        if(newZoom < 0.5) newZoom = 0.5;
+        if(newZoom > 1.5) newZoom = 1.5;
+        setZoom(newZoom);
+    };
+
+    // --- Firebase 데이터 리스너 ---
+    const layoutRef = ref(database, 'academy/config');
+    onValue(layoutRef, (snapshot) => {
+        dbLayout = snapshot.val() || initLayoutDB();
+        renderSeats(); renderLogbook();
+    });
+
+    const logRef = ref(database, `academy/logs/${todayStr}`);
+    onValue(logRef, (snapshot) => {
+        dbLog = snapshot.val() || {};
+        renderSeats(); renderLogbook();
+    });
+
+    function initLayoutDB() { return {}; } // 데이터 없으면 빈 객체 (초기화는 아래 버튼에서)
+
+    // --- UI 렌더링: 교시 버튼 ---
+    const periodContainer = document.getElementById('periodBtns');
+    function renderPeriodBtns() {
+        periodContainer.innerHTML = '';
+        
+        // 전체 명단 버튼
         const btnDay = document.createElement('button');
         btnDay.className = `period-btn day-record ${currentPeriod === 'day' ? 'active' : ''}`;
         btnDay.innerText = '전체명단(결석/조퇴)';
-        btnDay.onclick = () => changePeriod('day');
-        periodSelectorEl.appendChild(btnDay);
+        btnDay.onclick = () => { currentPeriod = 'day'; renderUI(); };
+        periodContainer.appendChild(btnDay);
 
-        // 1~8교시
+        // 1~8교시 버튼
         for(let i=1; i<=8; i++) {
             const btn = document.createElement('button');
             btn.className = `period-btn ${currentPeriod === String(i) ? 'active' : ''}`;
             btn.innerText = `${i}교시`;
-            btn.onclick = () => changePeriod(String(i));
-            periodSelectorEl.appendChild(btn);
+            btn.onclick = () => { currentPeriod = String(i); renderUI(); };
+            periodContainer.appendChild(btn);
         }
-    }
-
-    function changePeriod(period) {
-        currentPeriod = period;
-        renderPeriodButtons();
         
-        if (period === 'day') {
-            infoTextEl.innerText = "전체 기록 모드: 오늘 결석하거나 조퇴한 학생을 체크하세요.";
-        } else {
-            infoTextEl.innerText = `${period}교시 모드: 현재 자리에 없는 학생을 체크하세요. (결석생은 자동 제외됨)`;
-        }
-        renderSeats();
+        // 안내 문구
+        const info = document.getElementById('periodInfo');
+        info.innerText = currentPeriod === 'day' 
+            ? "📢 전체 기록: 오늘 결석/조퇴자를 체크하세요." 
+            : `📢 ${currentPeriod}교시: 현재 자리에 없는 학생을 체크하세요.`;
     }
 
-    // --- 3. Firebase 데이터 불러오기 ---
-    // (1) 자리 배치 불러오기
-    const layoutRef = ref(database, 'academy/config');
-    onValue(layoutRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            dbLayout = data;
-        } else {
-            initLayoutDB();
-        }
-        renderSeats(); // 배치 데이터 오면 그림
-        renderLogbook(); // 표도 그림
-    });
-
-    // (2) 오늘 출석 기록 불러오기 (날짜별 분리)
-    const logRef = ref(database, `academy/logs/${todayStr}`);
-    onValue(logRef, (snapshot) => {
-        dbLog = snapshot.val() || {};
-        renderSeats(); // 기록 바뀌면 좌석 갱신
-        renderLogbook(); // 표 갱신
-    });
-
-    function initLayoutDB() {
-        let initialData = {};
-        CLASSES.forEach((cls, idx) => {
-            initialData[idx] = {
-                name: cls,
-                rows: 6,
-                cols: 5,
-                students: Array(30).fill(null).map(() => ({ name: "빈자리", isVisible: true }))
-            };
-        });
-        set(ref(database, 'academy/config'), initialData);
-    }
-
-    // --- 4. 메인 화면 (좌석표) 그리기 ---
+    // --- UI 렌더링: 좌석표 ---
     function renderSeats() {
-        // 탭 그리기
+        const gridEl = document.getElementById('seatGrid');
+        const tabsEl = document.getElementById('classTabs');
+        
+        // 반 탭 생성
         tabsEl.innerHTML = '';
-        CLASSES.forEach((clsName, idx) => {
+        CLASSES.forEach((cls, idx) => {
             const btn = document.createElement('button');
-            btn.className = `tab-btn ${idx === currentClassIndex ? 'active' : ''}`;
-            btn.innerText = dbLayout[idx]?.name || clsName;
+            btn.className = `class-tab ${idx === currentClassIndex ? 'active' : ''}`;
+            btn.innerText = dbLayout[idx]?.name || cls;
             btn.onclick = () => { currentClassIndex = idx; renderSeats(); };
             tabsEl.appendChild(btn);
         });
 
-        const layoutData = dbLayout[currentClassIndex];
-        if(!layoutData) return;
+        const layout = dbLayout[currentClassIndex];
+        if(!layout) return;
 
-        // UI 모드 처리
-        if(chkLayout.checked) {
+        // 배치 모드 UI 처리
+        const isLayoutMode = document.getElementById('modeLayout').checked;
+        const layoutControls = document.getElementById('layoutControls');
+        if(isLayoutMode) {
             layoutControls.classList.add('show');
             gridEl.classList.add('editing');
-            chkEditName.checked = false;
+            document.getElementById('modeEditName').checked = false;
         } else {
             layoutControls.classList.remove('show');
             gridEl.classList.remove('editing');
         }
+        document.getElementById('colsInput').value = layout.cols;
+        document.getElementById('rowsInput').value = layout.rows;
 
-        // 입력창 동기화
-        document.getElementById('colsInput').value = layoutData.cols;
-        document.getElementById('rowsInput').value = layoutData.rows;
-
-        // 그리드 설정
+        // 그리드 스타일
         gridEl.innerHTML = '';
-        gridEl.style.gridTemplateColumns = `repeat(${layoutData.cols}, 1fr)`;
+        gridEl.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
 
-        // 학생 루프
-        layoutData.students.forEach((student, seatIdx) => {
+        // 좌석 생성
+        layout.students.forEach((student, seatIdx) => {
             const seat = document.createElement('div');
-            let status = 0; // 0:출석, 1:결석, 2:조퇴, 3:교시이탈
+            let status = 0; // 0:출석, 1:결석, 2:조퇴, 3:이석
+            let statusText = "출석";
+            let statusClass = "present";
 
-            // 현재 기록 가져오기
+            // 상태 계산
             const classLog = dbLog[currentClassIndex] || {};
+            const dayStatus = classLog[`day_${seatIdx}`] || 0;
             
-            // 'day' 모드일 때는 전체 기록(Day) 확인
-            // 교시 모드일 때는 해당 교시 기록 확인
             if(currentPeriod === 'day') {
-                status = classLog[`day_${seatIdx}`] || 0; 
+                status = dayStatus;
             } else {
-                // 만약 'Day'기록에 결석(1)이 있으면 교시에서도 자동으로 빠진걸로 처리(하지만 시각적으론 다르게?)
-                const dayStatus = classLog[`day_${seatIdx}`] || 0;
-                if(dayStatus === 1) {
-                    status = 1; // 이미 결석임
-                } else if(dayStatus === 2) {
-                    status = 2; // 조퇴임
-                } else {
-                    status = classLog[`p${currentPeriod}_${seatIdx}`] || 0; // 0 or 3(이탈)
-                }
+                // 교시 모드
+                if(dayStatus === 1) status = 1; // 결석
+                else if(dayStatus === 2) status = 2; // 조퇴
+                else status = classLog[`p${currentPeriod}_${seatIdx}`] || 0;
             }
 
-            // 스타일 적용
-            seat.className = 'seat';
+            // 클래스 및 텍스트 결정
+            if(status === 1) { statusClass = "absent"; statusText = "결석"; }
+            else if(status === 2) { statusClass = "early"; statusText = "조퇴"; }
+            else if(status === 3) { statusClass = "missing"; statusText = "이석"; }
+            
+            // 디자인: 출석(0)일때는 깔끔하게
+            seat.className = `seat ${statusClass}`;
             if(student.isVisible === false) seat.classList.add('hidden-seat');
-            
-            let statusText = "출석";
-            if(status === 0) { seat.classList.add('present'); }
-            else if(status === 1) { seat.classList.add('absent'); statusText = "결석"; }
-            else if(status === 2) { seat.classList.add('early'); statusText = "조퇴"; }
-            else if(status === 3) { seat.classList.add('missing'); statusText = "이석"; }
 
-            // 교시 모드인데 출석(0)이면, 그냥 깔끔하게 아무 색/텍스트 없게 할수도 있지만, 
-            // "출석"이라고 명시하는게 헷갈리지 않음.
-            
             seat.innerHTML = `
                 <div class="seat-name">${student.name}</div>
-                ${ student.isVisible ? `<div class="seat-status">${statusText}</div>` : '' }
+                ${student.isVisible ? `<div class="seat-status">${statusText}</div>` : ''}
             `;
 
             seat.onclick = () => handleSeatClick(seatIdx, student);
@@ -338,417 +375,163 @@
         });
     }
 
-    // --- 5. 좌석 클릭 로직 ---
     function handleSeatClick(seatIdx, student) {
-        if(chkLayout.checked) {
-            // 배치 수정
-            const newData = {...student};
-            newData.isVisible = !(newData.isVisible ?? true);
+        if(document.getElementById('modeLayout').checked) {
+            const newData = {...student, isVisible: !(student.isVisible ?? true)};
             if(newData.isVisible) newData.name = "빈자리";
-            
-            const updatedStudents = [...dbLayout[currentClassIndex].students];
-            updatedStudents[seatIdx] = newData;
-            set(ref(database, `academy/config/${currentClassIndex}/students`), updatedStudents);
+            const updated = [...dbLayout[currentClassIndex].students];
+            updated[seatIdx] = newData;
+            set(ref(database, `academy/config/${currentClassIndex}/students`), updated);
             return;
         }
-
-        if(chkEditName.checked) {
-            // 이름 수정 (config 저장)
+        if(document.getElementById('modeEditName').checked) {
             if(student.isVisible === false) return;
-            const newName = prompt("학생 이름을 입력하세요:", student.name);
-            if(newName !== null) {
-                set(ref(database, `academy/config/${currentClassIndex}/students/${seatIdx}/name`), newName);
-            }
+            const newName = prompt("이름 변경:", student.name);
+            if(newName) set(ref(database, `academy/config/${currentClassIndex}/students/${seatIdx}/name`), newName);
             return;
         }
-
+        
         if(student.isVisible === false) return;
 
-        // 출석 체크 (logs 저장)
-        // 현재 상태 읽기
+        // 출석 체크 로직
         const classLog = dbLog[currentClassIndex] || {};
         let nextStatus = 0;
 
-        if (currentPeriod === 'day') {
-            // 전체 모드: 출석(0) -> 결석(1) -> 조퇴(2) -> 출석(0)
-            const currentStatus = classLog[`day_${seatIdx}`] || 0;
-            nextStatus = (currentStatus + 1) % 3;
+        if(currentPeriod === 'day') {
+            const curr = classLog[`day_${seatIdx}`] || 0;
+            nextStatus = (curr + 1) % 3; // 0->1->2->0
             set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/day_${seatIdx}`), nextStatus);
         } else {
-            // 교시 모드: 출석(0) -> 이석(3) -> 출석(0)
-            // 단, 이미 결석/조퇴인 학생은 수정 불가
             const dayStatus = classLog[`day_${seatIdx}`] || 0;
-            if(dayStatus !== 0) {
-                alert("결석 또는 조퇴한 학생입니다. '전체명단' 탭에서 수정하세요.");
-                return;
-            }
-            const currentPStatus = classLog[`p${currentPeriod}_${seatIdx}`] || 0;
-            nextStatus = (currentPStatus === 0) ? 3 : 0;
+            if(dayStatus !== 0) { alert("결석/조퇴자는 수정할 수 없습니다."); return; }
+            const curr = classLog[`p${currentPeriod}_${seatIdx}`] || 0;
+            nextStatus = (curr === 0) ? 3 : 0; // 0 <-> 3
             set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/p${currentPeriod}_${seatIdx}`), nextStatus);
         }
     }
 
-    // --- 6. 관리 대장 (표) 그리기 ---
+    // --- UI 렌더링: 관리 대장 ---
     function renderLogbook() {
-        let html = `<thead><tr><th class="row-header">구분</th>`;
-        
-        // 헤더 (반 이름)
+        const table = document.getElementById('logbookTable');
+        let html = `<thead><tr><th>구분</th>`;
         CLASSES.forEach((cls, idx) => {
             html += `<th>${dbLayout[idx]?.name || cls}</th>`;
         });
         html += `</tr></thead><tbody>`;
 
-        // 1. 총원 Row
-        html += `<tr><td class="row-header">총원</td>`;
+        // 1. 총원
+        html += `<tr><td>총원</td>`;
         CLASSES.forEach((cls, idx) => {
-            const students = dbLayout[idx]?.students || [];
-            const count = students.filter(s => s.isVisible !== false && s.name !== "빈자리").length;
-            html += `<td>${count}</td>`;
+            const cnt = (dbLayout[idx]?.students || []).filter(s => s.isVisible !== false && s.name !== "빈자리").length;
+            html += `<td class="cell-cnt">${cnt}</td>`;
         });
         html += `</tr>`;
 
-        // 2. 미등원(결석) Row
-        html += `<tr><td class="row-header">미등원<br>(결석)</td>`;
-        CLASSES.forEach((cls, idx) => {
-            const names = getNamesByStatus(idx, 'day', 1); // 1: 결석
-            html += `<td>${names.length > 0 ? `<span class="cell-names">${names.join(', ')}</span>` : '-'}</td>`;
-        });
-        html += `</tr>`;
-
-        // 3. 조퇴 Row
-        html += `<tr><td class="row-header">조퇴</td>`;
-        CLASSES.forEach((cls, idx) => {
-            const names = getNamesByStatus(idx, 'day', 2); // 2: 조퇴
-            html += `<td>${names.length > 0 ? `<span class="cell-names">${names.join(', ')}</span>` : '-'}</td>`;
-        });
-        html += `</tr>`;
-
-        // 4. 1~8교시 Row
-        for(let i=1; i<=8; i++) {
-            html += `<tr><td class="row-header">${i}교시</td>`;
+        // 2. 결석/조퇴
+        const types = [ {label:'미등원<br>(결석)', code:1}, {label:'조퇴', code:2} ];
+        types.forEach(type => {
+            html += `<tr><td>${type.label}</td>`;
             CLASSES.forEach((cls, idx) => {
-                const result = getPeriodStats(idx, i);
+                const names = getNames(idx, 'day', type.code);
+                html += `<td>${names.length ? `<span class="cell-names">${names.join(', ')}</span>` : '-'}</td>`;
+            });
+            html += `</tr>`;
+        });
+
+        // 3. 교시별 현황
+        for(let i=1; i<=8; i++) {
+            html += `<tr><td>${i}교시</td>`;
+            CLASSES.forEach((cls, idx) => {
+                const stats = getPeriodStats(idx, i);
                 html += `<td>
-                    <span class="cell-count">${result.presentCount}</span>
-                    ${result.missingNames.length > 0 ? `<span class="cell-names">(${result.missingNames.join(', ')})</span>` : ''}
+                    <span class="cell-cnt">${stats.present}</span>
+                    ${stats.missing.length ? `<span class="cell-names">(${stats.missing.join(',')})</span>` : ''}
                 </td>`;
             });
             html += `</tr>`;
         }
-
         html += `</tbody>`;
-        logbookTableEl.innerHTML = html;
+        table.innerHTML = html;
     }
 
-    // 헬퍼: 특정 상태(결석/조퇴)인 학생 이름 리스트 가져오기
-    function getNamesByStatus(classIdx, type, targetStatus) {
-        const students = dbLayout[classIdx]?.students || [];
-        const classLog = dbLog[classIdx] || {};
-        let names = [];
-
-        students.forEach((s, seatIdx) => {
-            if(s.isVisible === false || s.name === "빈자리") return;
-            const status = classLog[`day_${seatIdx}`] || 0;
-            if(status === targetStatus) names.push(s.name);
-        });
-        return names;
+    function getNames(cIdx, mode, code) {
+        const students = dbLayout[cIdx]?.students || [];
+        const log = dbLog[cIdx] || {};
+        return students.map((s, i) => {
+            if(s.isVisible===false || s.name==="빈자리") return null;
+            const status = log[`day_${i}`] || 0;
+            return status === code ? s.name : null;
+        }).filter(n => n);
     }
 
-    // 헬퍼: 교시별 통계 (출석수, 자리에 없는 사람 명단)
-    function getPeriodStats(classIdx, period) {
-        const students = dbLayout[classIdx]?.students || [];
-        const classLog = dbLog[classIdx] || {};
-        
-        let presentCount = 0;
-        let missingNames = [];
+    function getPeriodStats(cIdx, p) {
+        const students = dbLayout[cIdx]?.students || [];
+        const log = dbLog[cIdx] || {};
+        let present = 0;
+        let missing = [];
 
-        students.forEach((s, seatIdx) => {
-            if(s.isVisible === false || s.name === "빈자리") return;
-
-            const dayStatus = classLog[`day_${seatIdx}`] || 0;
-            const pStatus = classLog[`p${period}_${seatIdx}`] || 0;
-
-            // 자리에 없는 경우: 결석(1)이거나, 조퇴(2)이거나, 해당교시이탈(3)
-            if (dayStatus === 1 || dayStatus === 2 || pStatus === 3) {
-                // 결석/조퇴자도 해당 교시에 이름 표시할지? -> 사진엔 없음. 
-                // 사진엔 "자리에 없는데 출석이어야 하는 사람"만 표시하는듯 하지만
-                // 선생님 요청은 "결석이랑, 출석이 아니면서 자리에 없던 사람"
-                
-                // 로직: 결석자는 '미등원' 칸에 있으니 교시칸엔 안적음(사진참고). 
-                // 교시칸엔 "이석자(3)"만 적거나, 결석자도 포함해서 적거나.
-                // 편의상: 교시칸에는 "현재 자리에 없는 사람 이름"을 적되, 결석/조퇴자는 괄호처리하거나 제외.
-                // 사진 스타일: 숫자는 "출석한 인원". 이름은 "빠진애들"
-                
-                if (pStatus === 3) missingNames.push(s.name); // 이석자만 이름 표시 (결석자는 위에서 봤으니까)
+        students.forEach((s, i) => {
+            if(s.isVisible===false || s.name==="빈자리") return;
+            const dStat = log[`day_${i}`] || 0;
+            const pStat = log[`p${p}_${i}`] || 0;
+            
+            // 자리에 없는 경우: 결석(1), 조퇴(2), 이석(3)
+            if(dStat === 1 || dStat === 2 || pStat === 3) {
+                // 표에는 이석자만 이름 표시 (결석자는 위에서 표시했으므로)
+                if(pStat === 3) missing.push(s.name);
             } else {
-                presentCount++;
+                present++;
             }
         });
-
-        return { presentCount, missingNames };
+        return { present, missing };
     }
 
-    // --- 기타 버튼 이벤트 ---
-    renderPeriodButtons();
-    chkLayout.onchange = renderSeats;
-    chkEditName.onchange = renderSeats;
+    // --- 통합 렌더링 함수 ---
+    function renderUI() {
+        renderPeriodBtns();
+        renderSeats();
+    }
 
+    // --- 이벤트 바인딩 ---
+    document.getElementById('modeLayout').addEventListener('change', renderSeats);
+    document.getElementById('modeEditName').addEventListener('change', renderSeats);
+    
+    // 초기화 버튼들
     document.getElementById('btnResize').onclick = () => {
         const c = document.getElementById('colsInput').value;
         const r = document.getElementById('rowsInput').value;
-        if(confirm(`배치를 초기화하고 ${r}x${c}로 변경합니까?`)) {
-            const newData = Array(r*c).fill(null).map(()=>({name:"빈자리", isVisible:true}));
-            set(ref(database, `academy/config/${currentClassIndex}/rows`), Number(r));
-            set(ref(database, `academy/config/${currentClassIndex}/cols`), Number(c));
-            set(ref(database, `academy/config/${currentClassIndex}/students`), newData);
+        if(c && r && confirm("초기화 하시겠습니까?")) {
+            const arr = Array(r*c).fill(null).map(()=>({name:"빈자리", isVisible:true}));
+            set(ref(database, `academy/config/${currentClassIndex}`), { 
+                name: CLASSES[currentClassIndex], rows: Number(r), cols: Number(c), students: arr 
+            });
         }
-    };
+    }
     
-    // 의대반 초기화 버튼 로직 (기존과 동일)
+    // 의대반 Preset
     document.getElementById('btnLoadMedical').onclick = () => {
-        if(!confirm("의대반 배치를 초기화하시겠습니까?")) return;
-        const ROWS=7; const COLS=6;
-        const col1=["하지상","김선준","심현우","탁민혁","하지안","오동운","김은황"];
-        const col3=["김규원","최서윤","이여빈","김민호","전예서","임남경",""];
-        const col4=["손준민","오주하","임세은","김은서","김민지","박리원",""];
-        const col6=["서휘찬","조유빈","김태림","손준서","황건우","천서영","출입문"];
-        let newStudents=[];
+        if(!confirm("의대반 배치로 되돌리시겠습니까?")) return;
+        const ROWS=7, COLS=6;
+        const c1=["하지상","김선준","심현우","탁민혁","하지안","오동운","김은황"];
+        const c3=["김규원","최서윤","이여빈","김민호","전예서","임남경",""];
+        const c4=["손준민","오주하","임세은","김은서","김민지","박리원",""];
+        const c6=["서휘찬","조유빈","김태림","손준서","황건우","천서영","출입문"];
+        let st = [];
         for(let r=0; r<ROWS; r++){
             for(let c=0; c<COLS; c++){
-                let name="빈자리"; let vis=true;
-                if(c===0) name=col1[r]||"빈자리";
-                else if(c===1) vis=false;
-                else if(c===2){ name=col3[r]||"빈자리"; if(r===6) vis=false; }
-                else if(c===3){ name=col4[r]||"빈자리"; if(r===6) vis=false; }
-                else if(c===4) vis=false;
-                else if(c===5){ name=col6[r]||"빈자리"; if(name==="출입문") vis=false; }
-                newStudents.push({name:name, isVisible:vis});
+                let n="빈자리", v=true;
+                if(c==0) n=c1[r]||n; else if(c==1) v=false;
+                else if(c==2){ n=c3[r]||n; if(r==6) v=false; }
+                else if(c==3){ n=c4[r]||n; if(r==6) v=false; }
+                else if(c==4) v=false;
+                else if(c==5){ n=c6[r]||n; if(n=="출입문") v=false; }
+                st.push({name:n, isVisible:v});
             }
         }
-        set(ref(database, `academy/config/0`), { name:"의대반(101)", rows:ROWS, cols:COLS, students:newStudents });
+        set(ref(database, 'academy/config/0'), { name:"의대반(101)", rows:ROWS, cols:COLS, students:st });
     };
 
+    renderUI();
 </script>
-</body>
-</html>
-        authDomain: "attendence-e9aa8.firebaseapp.com",
-        projectId: "attendence-e9aa8",
-        storageBucket: "attendence-e9aa8.firebasestorage.app",
-        messagingSenderId: "449396483783",
-        appId: "1:449396483783:web:091b692225089b85a140e2",
-        measurementId: "G-5DW7DFXBSC"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
-
-    const CLASSES = ['의대반(101)', 'B반', 'C반', 'D반', 'E반', 'F반'];
-    const STATUS_TEXT = ['출석', '결석', '조퇴'];
-    const STATUS_CLASS = ['present', 'absent', 'early'];
-    
-    let currentClassIndex = 0;
-    let dbData = {}; 
-
-    const gridEl = document.getElementById('seatGrid');
-    const tabsEl = document.getElementById('classTabs');
-    const countPresentEl = document.getElementById('countPresent');
-    const countAbsentEl = document.getElementById('countAbsent');
-    const countEarlyEl = document.getElementById('countEarly');
-    const chkEditName = document.getElementById('modeEditName');
-    const chkLayout = document.getElementById('modeLayout');
-    const layoutControls = document.getElementById('layoutControls');
-
-    // DB 연결
-    const dbRef = ref(database, 'academy/classes');
-    onValue(dbRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            dbData = data;
-            render();
-        } else {
-            initDB();
-        }
-    });
-
-    function initDB() {
-        let initialData = {};
-        CLASSES.forEach((cls, idx) => {
-            initialData[idx] = {
-                name: cls,
-                rows: 6,
-                cols: 5,
-                students: Array(30).fill(null).map(() => ({ name: "빈자리", status: 0, isVisible: true }))
-            };
-        });
-        set(ref(database, 'academy/classes'), initialData);
-    }
-
-    // --- 📸 의대반 데이터 강제 설정 ---
-    document.getElementById('btnLoadMedical').onclick = () => {
-        if(!confirm("⚠️ 현재 '의대반(101)'의 배치가 사진과 똑같이 변경됩니다.\n기존 데이터는 덮어씌워집니다. 진행할까요?")) return;
-        
-        // 구조: [1인실] [빈칸] [왼쪽책상] [오른쪽책상] [빈칸] [창가책상]
-        const ROWS = 7;
-        const COLS = 6;
-        
-        const col1_single = ["하지상", "김선준", "심현우", "탁민혁", "하지안", "오동운", "김은황"];
-        const col3_left   = ["김규원", "최서윤", "이여빈", "김민호", "전예서", "임남경", ""];
-        const col4_right  = ["손준민", "오주하", "임세은", "김은서", "김민지", "박리원", ""];
-        const col6_window = ["서휘찬", "조유빈", "김태림", "손준서", "황건우", "천서영", "출입문"];
-
-        let newStudents = [];
-
-        for(let r=0; r<ROWS; r++) {
-            for(let c=0; c<COLS; c++) {
-                let name = "빈자리";
-                let isVisible = true;
-
-                if(c === 0) name = col1_single[r] || "빈자리";
-                else if(c === 1) isVisible = false; 
-                else if(c === 2) {
-                    name = col3_left[r] || "빈자리";
-                    if(r === 6) isVisible = false;
-                }
-                else if(c === 3) {
-                    name = col4_right[r] || "빈자리";
-                    if(r === 6) isVisible = false;
-                }
-                else if(c === 4) isVisible = false;
-                else if(c === 5) {
-                    name = col6_window[r] || "빈자리";
-                    if(name === "출입문") isVisible = false;
-                }
-
-                newStudents.push({ name: name, status: 0, isVisible: isVisible });
-            }
-        }
-
-        set(ref(database, `academy/classes/0`), {
-            name: "의대반(101)",
-            rows: ROWS,
-            cols: COLS,
-            students: newStudents
-        });
-
-        alert("✅ 의대반 배치가 완료되었습니다!");
-    };
-
-    function render() {
-        tabsEl.innerHTML = '';
-        CLASSES.forEach((clsName, idx) => {
-            const btn = document.createElement('button');
-            btn.className = `tab-btn ${idx === currentClassIndex ? 'active' : ''}`;
-            btn.innerText = dbData[idx]?.name || clsName;
-            btn.onclick = () => { currentClassIndex = idx; render(); };
-            tabsEl.appendChild(btn);
-        });
-
-        const currentData = dbData[currentClassIndex];
-        if(!currentData) return;
-
-        const isLayoutMode = chkLayout.checked;
-        if(isLayoutMode) {
-            layoutControls.classList.add('show');
-            gridEl.classList.add('editing');
-            document.body.classList.add('mode-editing');
-            chkEditName.checked = false; 
-        } else {
-            layoutControls.classList.remove('show');
-            gridEl.classList.remove('editing');
-            document.body.classList.remove('mode-editing');
-        }
-
-        document.getElementById('colsInput').value = currentData.cols;
-        document.getElementById('rowsInput').value = currentData.rows;
-
-        gridEl.innerHTML = '';
-        gridEl.style.gridTemplateColumns = `repeat(${currentData.cols}, 1fr)`;
-
-        let p=0, a=0, e=0;
-
-        currentData.students.forEach((student, seatIdx) => {
-            const seat = document.createElement('div');
-            seat.className = `seat ${STATUS_CLASS[student.status]}`;
-            if (student.isVisible === false) seat.className += ' hidden-seat';
-
-            seat.innerHTML = `
-                <div class="seat-name">${student.name}</div>
-                <div class="seat-status">${STATUS_TEXT[student.status]}</div>
-            `;
-            
-            if(student.isVisible !== false) {
-                if(student.status === 0) p++;
-                else if(student.status === 1) a++;
-                else if(student.status === 2) e++;
-            }
-
-            seat.onclick = () => handleSeatClick(seatIdx);
-            gridEl.appendChild(seat);
-        });
-
-        countPresentEl.innerText = p;
-        countAbsentEl.innerText = a;
-        countEarlyEl.innerText = e;
-    }
-
-    function handleSeatClick(seatIdx) {
-        const currentData = dbData[currentClassIndex];
-        const updatedStudents = [...currentData.students];
-        const student = {...updatedStudents[seatIdx]};
-        
-        if (chkLayout.checked) {
-            student.isVisible = !(student.isVisible ?? true);
-            if(student.isVisible) student.name = "빈자리";
-            saveStudent(seatIdx, student);
-            return;
-        }
-
-        if (chkEditName.checked) {
-            if(student.isVisible === false) return; 
-            const newName = prompt("학생 이름을 입력하세요:", student.name);
-            if (newName !== null) {
-                student.name = newName;
-                saveStudent(seatIdx, student);
-            }
-            return;
-        }
-
-        if(student.isVisible === false) return;
-        let nextStatus = (student.status + 1) % 3;
-        student.status = nextStatus;
-        saveStudent(seatIdx, student);
-    }
-
-    function saveStudent(seatIdx, studentData) {
-        const updatedStudents = [...dbData[currentClassIndex].students];
-        updatedStudents[seatIdx] = studentData;
-        set(ref(database, `academy/classes/${currentClassIndex}/students`), updatedStudents);
-    }
-
-    chkLayout.onchange = render;
-    chkEditName.onchange = render;
-
-    document.getElementById('btnResize').onclick = () => {
-        const newCols = parseInt(document.getElementById('colsInput').value);
-        const newRows = parseInt(document.getElementById('rowsInput').value);
-        if(!newCols || !newRows) return;
-        if(confirm(`주의: 칸 수를 바꾸면 배치가 초기화됩니다.\n${newRows}줄 x ${newCols}칸으로 다시 만들까요?`)) {
-            const totalSeats = newCols * newRows;
-            const newStudents = Array(totalSeats).fill(null).map(() => ({ name: "빈자리", status: 0, isVisible: true }));
-            set(ref(database, `academy/classes/${currentClassIndex}/cols`), newCols);
-            set(ref(database, `academy/classes/${currentClassIndex}/rows`), newRows);
-            set(ref(database, `academy/classes/${currentClassIndex}/students`), newStudents);
-        }
-    };
-
-    document.getElementById('btnReset').onclick = () => {
-        if(confirm("모두 '출석' 상태로 초기화할까요?")) {
-            const currentStudents = dbData[currentClassIndex].students;
-            const resetStudents = currentStudents.map(s => ({ ...s, status: 0 }));
-            set(ref(database, `academy/classes/${currentClassIndex}/students`), resetStudents);
-        }
-    };
-</script>
-
 </body>
 </html>
