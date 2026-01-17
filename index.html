@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>스마트 학원 관리 (자유배치형)</title>
+    <title>스마트 학원 관리 (Pro)</title>
     <style>
         /* --- 1. 기본 스타일 --- */
-        body { font-family: 'Apple SD Gothic Neo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; overflow: hidden; /* 스크롤 없음 (캔버스 방식) */ }
+        body { font-family: 'Apple SD Gothic Neo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; overflow: hidden; overscroll-behavior: none; }
         
-        /* 고정 헤더 */
         .fixed-header {
             position: absolute; top: 0; left: 0; width: 100%; height: 110px; z-index: 1000;
-            background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
         .top-bar {
             display: flex; justify-content: space-between; align-items: center;
@@ -28,42 +27,56 @@
         }
         .nav-btn.active { color: #3b82f6; border-bottom-color: #3b82f6; background: #f8fafc; }
 
-        /* --- 2. 캔버스 영역 (화면 전체) --- */
+        /* --- 2. 캔버스 영역 --- */
         #canvasContainer {
             position: absolute; top: 110px; left: 0; right: 0; bottom: 0;
-            background-color: #e5e7eb; /* 배경색 (책상 외 공간) */
+            background-color: #e5e7eb; 
             overflow: hidden;
-            touch-action: none; /* 브라우저 기본 제스처 차단 */
+            touch-action: none; 
             cursor: grab;
         }
         #canvasContainer:active { cursor: grabbing; }
 
-        /* 실제 내용물 (확대/이동 되는 판) */
         #world {
             position: absolute; top: 0; left: 0;
-            width: 2000px; height: 2000px; /* 아주 넓은 공간 */
-            transform-origin: 0 0;
-            /* 배경에 격자무늬를 줘서 공간감을 줌 */
+            width: 0; height: 0; 
+            transform-origin: 0 0; 
+            will-change: transform; 
+        }
+        
+        #grid-bg {
+            position: absolute; top: -5000px; left: -5000px; width: 10000px; height: 10000px;
             background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
             background-size: 20px 20px;
+            pointer-events: none; z-index: -1;
         }
 
-        /* --- 3. 좌석 스타일 (절대 위치) --- */
+        /* --- 3. 좌석 스타일 --- */
         .seat {
-            position: absolute; /* 자유 배치의 핵심 */
-            width: 80px; height: 60px;
+            position: absolute;
+            width: 90px; height: 65px;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             background: white; border: 2px solid #cbd5e1; border-radius: 8px;
             cursor: pointer; user-select: none;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: border-color 0.2s, transform 0.1s;
+            transition: border-color 0.2s, background-color 0.2s; 
             z-index: 10;
         }
-        /* 드래그 중일 때 효과 */
-        .seat.dragging { opacity: 0.8; z-index: 100; box-shadow: 0 10px 20px rgba(0,0,0,0.2); transform: scale(1.05); }
+        .seat.dragging { 
+            opacity: 0.9; z-index: 100; 
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3); 
+            transform: scale(1.05); 
+        }
 
-        .seat-name { font-weight: 800; font-size: 1rem; color: #334155; pointer-events: none; }
-        .seat-status { font-size: 0.75rem; font-weight: bold; color: #94a3b8; pointer-events: none; }
+        /* 🔴 좌석 번호 스타일 (왼쪽 위 구석) */
+        .seat-num {
+            position: absolute; top: 3px; left: 6px;
+            font-size: 0.75rem; color: #94a3b8; font-weight: 600;
+            pointer-events: none;
+        }
+
+        .seat-name { font-weight: 800; font-size: 1.1rem; color: #334155; pointer-events: none; margin-top: 5px; }
+        .seat-status { font-size: 0.8rem; font-weight: bold; color: #94a3b8; pointer-events: none; }
 
         /* 상태 색상 */
         .seat.present { border-color: #22c55e; color: #15803d; }
@@ -75,19 +88,21 @@
         .seat.early .seat-status { color: #d97706; }
         .seat.missing { border-color: #64748b; background: #f1f5f9; opacity: 0.6; }
         .seat.missing .seat-name { text-decoration: line-through; color: #64748b; }
+        
+        .seat.hidden-seat { visibility: hidden; }
+        .editing .seat.hidden-seat { visibility: visible; opacity: 0.5; border: 2px dashed #999; background: #eee;}
 
-        /* --- 4. 컨트롤 패널 (떠있는 UI) --- */
+        /* --- 4. 컨트롤 패널 --- */
         .floating-controls {
             position: absolute; top: 120px; left: 10px; right: 10px;
-            pointer-events: none; /* 배경 터치는 통과시킴 */
-            z-index: 2000;
+            pointer-events: none; z-index: 2000;
             display: flex; flex-direction: column; gap: 10px;
         }
         .control-box {
             background: rgba(255, 255, 255, 0.95);
             padding: 10px; border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            pointer-events: auto; /* 버튼 클릭은 가능하게 */
+            pointer-events: auto;
         }
 
         .period-scroll { display: flex; gap: 5px; overflow-x: auto; }
@@ -106,18 +121,16 @@
         }
         .class-tab.active { background: #3b82f6; color: white; }
 
-        /* 설정창 */
         .settings-box { display: none; text-align: right; font-size: 0.9rem;}
         .settings-box.show { display: block; }
         .btn-action { background: #475569; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
 
-        /* --- 5. 관리대장 (별도 화면) --- */
+        /* --- 5. 관리대장 --- */
         #logbookView {
             display: none; position: absolute; top: 110px; left: 0; right: 0; bottom: 0;
             background: white; z-index: 3000; overflow-y: auto; padding: 20px;
         }
         #logbookView.active { display: block; }
-        
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: center; }
         th { background: #f8fafc; color: #334155; }
@@ -127,7 +140,7 @@
 
 <div class="fixed-header">
     <div class="top-bar">
-        <div class="app-title">🏫 스마트 학원 관리 (자유배치)</div>
+        <div class="app-title">🏫 스마트 학원 관리 (Pro)</div>
         <div class="clock" id="seoulClock">00:00</div>
     </div>
     <nav class="main-nav">
@@ -138,7 +151,8 @@
 
 <div id="canvasContainer">
     <div id="world">
-        </div>
+        <div id="grid-bg"></div>
+    </div>
 </div>
 
 <div id="attendanceControls" class="floating-controls">
@@ -155,9 +169,8 @@
         
         <div id="layoutTools" class="settings-box">
             <hr style="border:0; border-top:1px solid #eee; margin:5px 0;">
-            <span style="color:#666; font-size:0.8rem;">초기화: </span>
-            <button class="btn-action" onclick="resetToGrid(5,6)">5x6 격자생성</button>
-            <button class="btn-action" style="background:#4f46e5;" onclick="resetToMedical()">📸의대반 배치</button>
+            <button class="btn-action" onclick="resetToGrid(5,6)">기본 5x6 생성</button>
+            <button class="btn-action" style="background:#4f46e5;" onclick="resetToMedical()">📸의대반(번호할당)</button>
         </div>
     </div>
 </div>
@@ -171,7 +184,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
     import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-    // 🔴 Firebase 키 입력 🔴
+    // 🔴 [중요] Firebase 키 입력 🔴
     const firebaseConfig = {
         apiKey: "AIzaSyAGdK_AGLtW0DpTvJ3KKrdfq_InIBUI-lY",
         authDomain: "attendence-e9aa8.firebaseapp.com",
@@ -185,20 +198,17 @@
     const app = initializeApp(firebaseConfig);
     const database = getDatabase(app);
 
-    // --- 변수 ---
     const CLASSES = ['의대반(101)', 'B반', 'C반', 'D반', 'E반', 'F반'];
     let currentClassIndex = 0;
     let currentPeriod = 'day'; 
     let todayStr = "";
     
-    // 캔버스 상태
-    let panX = 100, panY = 100, scale = 1.0;
-    let isPanning = false, startX = 0, startY = 0;
+    // 뷰포트 상태
+    let panX = 0, panY = 0, scale = 1.0;
     
     let dbLayout = {}; 
     let dbLog = {};    
 
-    // --- 시계 ---
     function updateClock() {
         const now = new Date();
         document.getElementById('seoulClock').innerText = now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
@@ -208,7 +218,6 @@
     }
     setInterval(updateClock, 1000); updateClock();
 
-    // --- 화면 전환 ---
     window.switchView = (mode) => {
         const controls = document.getElementById('attendanceControls');
         const canvas = document.getElementById('canvasContainer');
@@ -231,97 +240,144 @@
         }
     }
 
-    // --- 📡 Firebase 데이터 ---
-    onValue(ref(database, 'academy/config'), snap => { dbLayout = snap.val() || {}; renderSeats(); renderLogbook(); });
-    onValue(ref(database, `academy/logs/${todayStr}`), snap => { dbLog = snap.val() || {}; renderSeats(); renderLogbook(); });
-
-    // --- 🎨 캔버스 조작 (Pan & Zoom) ---
+    // --- 캔버스 조작 (Pan & Pinch Zoom) ---
     const container = document.getElementById('canvasContainer');
     const world = document.getElementById('world');
 
     function updateTransform() {
-        world.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        world.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${scale})`;
     }
 
-    // 1. 배경 드래그 (이동)
+    function centerView() {
+        const cw = container.clientWidth;
+        panX = (cw - 600) / 2; 
+        panY = 100;
+        scale = 1.0;
+        updateTransform();
+    }
+    setTimeout(centerView, 500);
+
+    let isDragging = false;
+    let startPointers = [];
+
+    function getDistance(p1, p2) { return Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY); }
+    function getMidpoint(p1, p2) { return { x: (p1.clientX + p2.clientX) / 2, y: (p1.clientY + p2.clientY) / 2 }; }
+
     container.addEventListener('pointerdown', e => {
-        if(e.target !== container && e.target !== world) return; // 좌석 클릭시엔 이동 안함
-        isPanning = true;
-        startX = e.clientX - panX;
-        startY = e.clientY - panY;
+        if(e.target.closest('.seat') && document.getElementById('modeLayout').checked) return;
         container.setPointerCapture(e.pointerId);
+        startPointers.push(e);
+        isDragging = true;
     });
 
     container.addEventListener('pointermove', e => {
-        if(!isPanning) return;
-        panX = e.clientX - startX;
-        panY = e.clientY - startY;
-        updateTransform();
+        const index = startPointers.findIndex(p => p.pointerId === e.pointerId);
+        if (index !== -1) startPointers[index] = e;
+
+        if (!isDragging || startPointers.length === 0) return;
+
+        if (startPointers.length === 1) {
+            panX += e.movementX;
+            panY += e.movementY;
+            updateTransform();
+        }
     });
 
-    container.addEventListener('pointerup', () => { isPanning = false; });
+    container.addEventListener('pointerup', e => {
+        const index = startPointers.findIndex(p => p.pointerId === e.pointerId);
+        if (index !== -1) startPointers.splice(index, 1);
+        if (startPointers.length === 0) isDragging = false;
+        container.releasePointerCapture(e.pointerId);
+    });
 
-    // 2. 휠 줌 (PC)
+    // 📱 모바일 핀치 줌
+    let initialPinchDist = 0;
+    let initialScale = 1;
+    let initialMidX = 0, initialMidY = 0;
+    let initialPanX = 0, initialPanY = 0;
+
+    container.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+            isDragging = false;
+            initialPinchDist = getDistance(e.touches[0], e.touches[1]);
+            initialScale = scale;
+            const mid = getMidpoint(e.touches[0], e.touches[1]);
+            initialMidX = mid.x; initialMidY = mid.y;
+            initialPanX = panX; initialPanY = panY;
+        }
+    }, { passive: false });
+
+    container.addEventListener('touchmove', e => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const currentDist = getDistance(e.touches[0], e.touches[1]);
+            let newScale = initialScale * (currentDist / initialPinchDist);
+            newScale = Math.min(Math.max(0.3, newScale), 4.0);
+            
+            const scaleRatio = newScale / initialScale;
+            const offsetX = initialMidX - initialPanX;
+            const offsetY = initialMidY - initialPanY;
+
+            panX = initialMidX - (offsetX * scaleRatio);
+            panY = initialMidY - (offsetY * scaleRatio);
+            scale = newScale;
+            updateTransform();
+        }
+    }, { passive: false });
+
+    // 🖱️ PC 휠 줌
     container.addEventListener('wheel', e => {
         e.preventDefault();
-        const zoomSpeed = 0.001;
-        const newScale = scale - e.deltaY * zoomSpeed;
-        scale = Math.min(Math.max(0.3, newScale), 3.0);
+        const delta = -e.deltaY * 0.001;
+        const newScale = Math.min(Math.max(0.3, scale + delta), 4.0);
+        
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const scaleRatio = newScale / scale;
+        
+        panX = mouseX - (mouseX - panX) * scaleRatio;
+        panY = mouseY - (mouseY - panY) * scaleRatio;
+        scale = newScale;
         updateTransform();
     }, { passive: false });
 
-    // 3. 핀치 줌 (모바일)
-    let initDist = 0;
-    let initScale = 1;
-    container.addEventListener('touchstart', e => {
-        if(e.touches.length === 2) {
-            initDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            initScale = scale;
-        }
-    });
-    container.addEventListener('touchmove', e => {
-        if(e.touches.length === 2) {
-            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            scale = Math.min(Math.max(0.3, initScale * (dist / initDist)), 3.0);
-            updateTransform();
-            e.preventDefault();
-        }
-    }, { passive: false });
+    // --- Firebase & 렌더링 ---
+    onValue(ref(database, 'academy/config'), snap => { dbLayout = snap.val() || {}; renderSeats(); renderLogbook(); });
+    onValue(ref(database, `academy/logs/${todayStr}`), snap => { dbLog = snap.val() || {}; renderSeats(); renderLogbook(); });
 
-
-    // --- 💺 좌석 렌더링 & 드래그 로직 ---
     function renderSeats() {
-        // UI 동기화
         renderUIControls();
+        world.innerHTML = '<div id="grid-bg"></div>';
         
-        world.innerHTML = ''; // 초기화
         const students = dbLayout[currentClassIndex]?.students || [];
         const isLayoutMode = document.getElementById('modeLayout').checked;
         const layoutTools = document.getElementById('layoutTools');
         
-        if(isLayoutMode) layoutTools.classList.add('show');
-        else layoutTools.classList.remove('show');
+        if(isLayoutMode) {
+            layoutTools.classList.add('show');
+            world.classList.add('editing');
+        } else {
+            layoutTools.classList.remove('show');
+            world.classList.remove('editing');
+        }
 
         students.forEach((s, idx) => {
-            if(!s.isVisible) return; // 숨김 좌석은 아예 안 그림
+            if(!s.isVisible && !isLayoutMode) return;
 
             const el = document.createElement('div');
             el.className = 'seat';
             
-            // 저장된 좌표가 없으면 기본 좌표 부여 (겹치지 않게)
             const x = s.x ?? (idx % 6) * 100 + 50;
             const y = s.y ?? Math.floor(idx / 6) * 80 + 50;
-            el.style.left = `${x}px`;
-            el.style.top = `${y}px`;
+            el.style.transform = `translate(${x}px, ${y}px)`;
 
-            // 상태 표시
             let status = 0; 
             const log = dbLog[currentClassIndex] || {};
             if(currentPeriod === 'day') status = log[`day_${idx}`] || 0;
             else {
                 const dayStatus = log[`day_${idx}`] || 0;
-                if(dayStatus > 0) status = dayStatus;
-                else status = log[`p${currentPeriod}_${idx}`] || 0;
+                status = (dayStatus > 0) ? dayStatus : (log[`p${currentPeriod}_${idx}`] || 0);
             }
 
             if(status===1) { el.classList.add('absent'); el.innerHTML += `<span class="seat-status">결석</span>`; }
@@ -329,49 +385,50 @@
             else if(status===3) { el.classList.add('missing'); el.innerHTML += `<span class="seat-status">이석</span>`; }
             else { el.classList.add('present'); el.innerHTML += `<span class="seat-status">출석</span>`; }
 
-            el.insertAdjacentHTML('afterbegin', `<div class="seat-name">${s.name}</div>`);
+            // 🔴 좌석 번호 표시 (s.seatNum이 있으면 표시)
+            const numHtml = s.seatNum ? `<div class="seat-num">${s.seatNum}</div>` : '';
+            
+            el.insertAdjacentHTML('afterbegin', `${numHtml}<div class="seat-name">${s.name}</div>`);
+            if(!s.isVisible) el.classList.add('hidden-seat');
 
-            // 드래그 로직 (자유 배치)
+            // 드래그 로직 (배치 모드)
             el.addEventListener('pointerdown', e => {
                 if(!isLayoutMode) {
-                    handleSeatClick(idx, s); // 일반 모드에선 출석체크
+                    handleSeatClick(idx, s); 
                     return;
                 }
-                
-                // 배치 모드: 드래그 시작
-                e.stopPropagation(); // 캔버스 Pan 방지
+                e.stopPropagation(); 
                 el.classList.add('dragging');
                 el.setPointerCapture(e.pointerId);
-                
-                // 마우스 클릭 위치와 요소 위치의 차이 계산
+
                 const rect = el.getBoundingClientRect();
-                const worldRect = world.getBoundingClientRect();
-                
-                // 현재 world 내에서의 상대 좌표 (scale 고려)
-                const startLeft = (rect.left - worldRect.left) / scale;
-                const startTop = (rect.top - worldRect.top) / scale;
-                const clickOffsetX = (e.clientX - rect.left) / scale;
-                const clickOffsetY = (e.clientY - rect.top) / scale;
+                const offsetX = e.clientX - rect.left;
+                const offsetY = e.clientY - rect.top;
 
                 function move(evt) {
-                    const worldRectNow = world.getBoundingClientRect();
-                    const newX = (evt.clientX - worldRectNow.left) / scale - clickOffsetX;
-                    const newY = (evt.clientY - worldRectNow.top) / scale - clickOffsetY;
+                    const containerRect = container.getBoundingClientRect();
+                    const canvasMouseX = evt.clientX - containerRect.left;
+                    const canvasMouseY = evt.clientY - containerRect.top;
                     
-                    el.style.left = `${newX}px`;
-                    el.style.top = `${newY}px`;
+                    let worldX = (canvasMouseX - panX) / scale;
+                    let worldY = (canvasMouseY - panY) / scale;
+
+                    worldX -= offsetX / scale;
+                    worldY -= offsetY / scale;
+
+                    el.style.transform = `translate(${worldX}px, ${worldY}px)`;
+                    el.dataset.nx = Math.round(worldX);
+                    el.dataset.ny = Math.round(worldY);
                 }
 
                 function up(evt) {
                     el.removeEventListener('pointermove', move);
                     el.removeEventListener('pointerup', up);
                     el.classList.remove('dragging');
-                    
-                    // 좌표 저장
-                    const finalX = parseFloat(el.style.left);
-                    const finalY = parseFloat(el.style.top);
-                    set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/x`), Math.round(finalX));
-                    set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/y`), Math.round(finalY));
+                    const finalX = el.dataset.nx ? parseInt(el.dataset.nx) : x;
+                    const finalY = el.dataset.ny ? parseInt(el.dataset.ny) : y;
+                    set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/x`), finalX);
+                    set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/y`), finalY);
                 }
                 el.addEventListener('pointermove', move);
                 el.addEventListener('pointerup', up);
@@ -399,9 +456,7 @@
         }
     }
 
-    // --- UI 업데이트 ---
     function renderUIControls() {
-        // 교시 버튼
         const pCont = document.getElementById('periodBtns');
         pCont.innerHTML = '';
         ['day',1,2,3,4,5,6,7,8].forEach(p => {
@@ -413,7 +468,6 @@
             pCont.appendChild(btn);
         });
 
-        // 반 탭
         const cCont = document.getElementById('classTabs');
         cCont.innerHTML = '';
         CLASSES.forEach((cls, i) => {
@@ -424,65 +478,57 @@
             cCont.appendChild(btn);
         });
         
-        document.getElementById('periodInfo').innerText = currentPeriod === 'day' 
-            ? "📢 결석/조퇴 체크" : `📢 ${currentPeriod}교시 이석 체크`;
+        document.getElementById('periodInfo').innerText = currentPeriod === 'day' ? "📢 결석/조퇴 체크" : `📢 ${currentPeriod}교시 이석 체크`;
     }
 
-    // --- 🛠️ 초기화 도구 (Grid -> Absolute 변환) ---
     window.resetToGrid = (cols, rows) => {
-        if(!confirm("현재 반을 초기화하고 격자로 재배치합니다.")) return;
+        if(!confirm("초기화 하시겠습니까?")) return;
         let students = [];
+        let num = 1;
         for(let r=0; r<rows; r++) {
             for(let c=0; c<cols; c++) {
-                // 좌표 자동 계산 (간격 90x70)
-                students.push({
-                    name: "빈자리", 
-                    isVisible: true,
-                    x: c * 90 + 50, 
-                    y: r * 70 + 50 
-                });
+                students.push({ name: "빈자리", isVisible: true, x: c * 100 + 50, y: r * 80 + 50, seatNum: num++ });
             }
         }
-        set(ref(database, `academy/config/${currentClassIndex}`), { 
-            name: CLASSES[currentClassIndex], students 
-        });
+        set(ref(database, `academy/config/${currentClassIndex}`), { name: CLASSES[currentClassIndex], students });
     }
 
+    // 🔴 [수정됨] 의대반 번호 할당 로직
     window.resetToMedical = () => {
-        if(!confirm("의대반(101) 스타일로 초기화합니다.")) return;
-        // 의대반 사진 기반 좌표 하드코딩 (대략적 위치)
+        if(!confirm("의대반(101) 스타일로 초기화?")) return;
         const students = [];
-        const add = (name, x, y) => students.push({name, isVisible:true, x, y});
+        // Helper: 번호를 받아서 저장
+        const add = (name, x, y, num) => students.push({name, isVisible:true, x, y, seatNum: num});
         
-        // 1열 (1인실)
-        const col1Names = ["하지상","김선준","심현우","탁민혁","하지안","오동운","김은황"];
-        col1Names.forEach((n, i) => add(n, 50, 50 + i*70));
+        // 카운터: 1번부터 시작
+        let seatCount = 1;
 
-        // 2열 (책상 그룹 왼쪽) - 조금 띄움 (x=200)
-        const col2Names = ["김규원","최서윤","이여빈","김민호","전예서","임남경"];
-        col2Names.forEach((n, i) => add(n, 200, 50 + i*70));
+        // 1열 (1인실) 7명 -> 번호 1~7
+        const c1=["하지상","김선준","심현우","탁민혁","하지안","오동운","김은황"];
+        c1.forEach((n, i) => add(n, 50, 50 + i*75, seatCount++)); 
 
-        // 3열 (책상 그룹 오른쪽) - 붙임 (x=290)
-        const col3Names = ["손준민","오주하","임세은","김은서","김민지","박리원"];
-        col3Names.forEach((n, i) => add(n, 290, 50 + i*70));
+        // 2열 (책상 그룹 왼쪽) 6명 -> 번호 8~13
+        const c2=["김규원","최서윤","이여빈","김민호","전예서","임남경"];
+        c2.forEach((n, i) => add(n, 200, 50 + i*75, seatCount++)); 
+        // 13번은 이 줄의 마지막(맨 아래) 사람 = 임남경
 
-        // 4열 (창가) - 멀리 띄움 (x=450)
-        const col4Names = ["서휘찬","조유빈","김태림","손준서","황건우","천서영"];
-        col4Names.forEach((n, i) => add(n, 450, 50 + i*70));
+        // 3열 (책상 그룹 오른쪽) 6명 -> 번호 14~19
+        const c3=["손준민","오주하","임세은","김은서","김민지","박리원"];
+        c3.forEach((n, i) => add(n, 295, 50 + i*75, seatCount++)); 
 
-        set(ref(database, `academy/config/${currentClassIndex}`), { 
-            name: "의대반(101)", students 
-        });
+        // 4열 (창가) 6명 -> 번호 20~25
+        const c4=["서휘찬","조유빈","김태림","손준서","황건우","천서영"];
+        c4.forEach((n, i) => add(n, 450, 50 + i*75, seatCount++)); 
+
+        set(ref(database, `academy/config/${currentClassIndex}`), { name: "의대반(101)", students });
     }
 
-    // --- 관리대장 렌더링 ---
     function renderLogbook() {
         const table = document.getElementById('logbookTable');
         let html = `<thead><tr><th>구분</th>`;
         CLASSES.forEach((cls, i) => html += `<th>${dbLayout[i]?.name || cls}</th>`);
         html += `</tr></thead><tbody>`;
 
-        // 총원
         html += `<tr><td>총원</td>`;
         CLASSES.forEach((cls, i) => {
             const cnt = (dbLayout[i]?.students||[]).filter(s=>s.isVisible).length;
@@ -490,7 +536,6 @@
         });
         html += `</tr>`;
 
-        // 결석/조퇴
         [{t:'미등원', c:1}, {t:'조퇴', c:2}].forEach(type => {
             html += `<tr><td>${type.t}</td>`;
             CLASSES.forEach((cls, i) => {
@@ -503,7 +548,6 @@
             html += `</tr>`;
         });
 
-        // 교시별
         for(let p=1; p<=8; p++) {
             html += `<tr><td>${p}교시</td>`;
             CLASSES.forEach((cls, i) => {
@@ -524,429 +568,8 @@
         table.innerHTML = html + `</tbody>`;
     }
 
-    // 이벤트 리스너
     document.getElementById('modeLayout').onchange = renderSeats;
     document.getElementById('modeEditName').onchange = renderSeats;
-</script>
-</body>
-</html>
-        </div>
-        <div class="period-scroll" id="periodBtns"></div>
-    </div>
-
-    <div class="class-tabs" id="classTabs"></div>
-
-    <div id="layoutControls" class="settings-bar">
-        가로: <input type="number" id="colsInput" style="width:40px;"> 
-        세로: <input type="number" id="rowsInput" style="width:40px;"> 
-        <button class="btn-update" id="btnResize">변경</button>
-        <button class="btn-reset" id="btnLoadMedical" style="margin-left:10px;">📸의대반 초기화</button>
-    </div>
-
-    <div class="zoom-controls">
-        <button class="zoom-btn" onclick="updateZoom(-0.1)">-</button>
-        <input type="range" id="zoomRange" min="0.5" max="2.0" step="0.05" value="1.0" oninput="setZoom(this.value)">
-        <button class="zoom-btn" onclick="updateZoom(0.1)">+</button>
-    </div>
-
-    <div class="seat-container" id="seatContainer">
-        <div class="zoom-wrapper" id="zoomWrapper">
-            <div id="seatGrid" class="seat-grid">
-                <div style="text-align:center; padding:50px; color:#666;">데이터를 불러오는 중...</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div id="viewLogbook" class="view-section container">
-    <div class="logbook-container">
-        <div style="font-size:1.1rem; font-weight:bold; margin-bottom:15px; color:#1e293b;">📋 실시간 출석 현황표</div>
-        <table id="logbookTable"></table>
-    </div>
-</div>
-
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
-
-    // 🔴 [중요] 선생님의 Firebase 키값을 여기에 붙여넣으세요 🔴
-    const firebaseConfig = {
-        apiKey: "AIzaSyAGdK_AGLtW0DpTvJ3KKrdfq_InIBUI-lY",
-        authDomain: "attendence-e9aa8.firebaseapp.com",
-        projectId: "attendence-e9aa8",
-        storageBucket: "attendence-e9aa8.firebasestorage.app",
-        messagingSenderId: "449396483783",
-        appId: "1:449396483783:web:091b692225089b85a140e2",
-        measurementId: "G-5DW7DFXBSC"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
-
-    const CLASSES = ['의대반(101)', 'B반', 'C반', 'D반', 'E반', 'F반'];
-    let currentClassIndex = 0;
-    let currentPeriod = 'day'; 
-    let todayStr = "";
-    let currentZoom = 1.0;
-    let sortableInstance = null; // 드래그 앤 드롭 인스턴스
-
-    let dbLayout = {}; 
-    let dbLog = {};    
-
-    // --- 시계 & 초기화 ---
-    function updateClock() {
-        const now = new Date();
-        const options = { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' };
-        document.getElementById('seoulClock').innerText = now.toLocaleString('ko-KR', options);
-        
-        const offset = now.getTimezoneOffset() * 60000;
-        const krTime = new Date(now.getTime() + offset + (9 * 60 * 60 * 1000));
-        todayStr = krTime.toISOString().split('T')[0];
-    }
-    setInterval(updateClock, 1000); updateClock();
-
-    window.switchView = (viewName) => {
-        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-        if(viewName === 'attendance') {
-            document.getElementById('viewAttendance').classList.add('active');
-            document.querySelectorAll('.nav-btn')[0].classList.add('active');
-        } else {
-            document.getElementById('viewLogbook').classList.add('active');
-            document.querySelectorAll('.nav-btn')[1].classList.add('active');
-            renderLogbook();
-        }
-    };
-
-    // --- ✋ 핀치 줌 (Pinch Zoom) 로직 ---
-    const seatContainer = document.getElementById('seatContainer');
-    const zoomWrapper = document.getElementById('zoomWrapper');
-    let initialDistance = 0;
-    let initialZoom = 1.0;
-
-    seatContainer.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 2) {
-            e.preventDefault(); // 브라우저 기본 줌 방지
-            initialDistance = getDistance(e.touches);
-            initialZoom = currentZoom;
-        }
-    }, { passive: false });
-
-    seatContainer.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) {
-            e.preventDefault();
-            const currentDistance = getDistance(e.touches);
-            if (initialDistance > 0) {
-                const scaleChange = currentDistance / initialDistance;
-                let newZoom = initialZoom * scaleChange;
-                // 한계 설정
-                if (newZoom < 0.5) newZoom = 0.5;
-                if (newZoom > 2.0) newZoom = 2.0;
-                setZoom(newZoom);
-            }
-        }
-    }, { passive: false });
-
-    function getDistance(touches) {
-        const dx = touches[0].clientX - touches[1].clientX;
-        const dy = touches[0].clientY - touches[1].clientY;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    window.setZoom = (val) => {
-        currentZoom = parseFloat(val);
-        document.getElementById('zoomRange').value = currentZoom;
-        zoomWrapper.style.transform = `scale(${currentZoom})`;
-        // 줌 했을 때 원점 조정 (왼쪽 위 기준)
-        zoomWrapper.style.transformOrigin = "top left";
-        
-        // 컨테이너 크기 재계산 (스크롤 영역 확보)
-        const gridW = document.getElementById('seatGrid').offsetWidth;
-        const gridH = document.getElementById('seatGrid').offsetHeight;
-        zoomWrapper.style.width = `${gridW}px`;
-        zoomWrapper.style.height = `${gridH}px`;
-    };
-    window.updateZoom = (delta) => setZoom(Math.max(0.5, Math.min(2.0, currentZoom + delta)));
-
-
-    // --- Firebase Data ---
-    const layoutRef = ref(database, 'academy/config');
-    onValue(layoutRef, (snapshot) => { dbLayout = snapshot.val() || {}; renderSeats(); renderLogbook(); });
-    const logRef = ref(database, `academy/logs/${todayStr}`);
-    onValue(logRef, (snapshot) => { dbLog = snapshot.val() || {}; renderSeats(); renderLogbook(); });
-
-
-    // --- UI Render ---
-    function renderPeriodBtns() {
-        const container = document.getElementById('periodBtns');
-        container.innerHTML = '';
-        const btnDay = document.createElement('button');
-        btnDay.className = `period-btn day-record ${currentPeriod === 'day' ? 'active' : ''}`;
-        btnDay.innerText = '전체명단(결석/조퇴)';
-        btnDay.onclick = () => { currentPeriod = 'day'; renderUI(); };
-        container.appendChild(btnDay);
-
-        for(let i=1; i<=8; i++) {
-            const btn = document.createElement('button');
-            btn.className = `period-btn ${currentPeriod === String(i) ? 'active' : ''}`;
-            btn.innerText = `${i}교시`;
-            btn.onclick = () => { currentPeriod = String(i); renderUI(); };
-            container.appendChild(btn);
-        }
-        document.getElementById('periodInfo').innerText = currentPeriod === 'day' 
-            ? "📢 전체 기록: 오늘 결석/조퇴자를 체크하세요." 
-            : `📢 ${currentPeriod}교시: 자리에 없는 학생 체크`;
-    }
-
-    function renderSeats() {
-        const gridEl = document.getElementById('seatGrid');
-        const tabsEl = document.getElementById('classTabs');
-        
-        tabsEl.innerHTML = '';
-        CLASSES.forEach((cls, idx) => {
-            const btn = document.createElement('button');
-            btn.className = `class-tab ${idx === currentClassIndex ? 'active' : ''}`;
-            btn.innerText = dbLayout[idx]?.name || cls;
-            btn.onclick = () => { currentClassIndex = idx; renderSeats(); };
-            tabsEl.appendChild(btn);
-        });
-
-        const layout = dbLayout[currentClassIndex];
-        if(!layout) return;
-
-        const isLayoutMode = document.getElementById('modeLayout').checked;
-        const layoutControls = document.getElementById('layoutControls');
-        
-        // 모드에 따른 UI 처리
-        if(isLayoutMode) {
-            layoutControls.classList.add('show');
-            gridEl.classList.add('editing');
-            document.getElementById('modeEditName').checked = false;
-        } else {
-            layoutControls.classList.remove('show');
-            gridEl.classList.remove('editing');
-        }
-
-        document.getElementById('colsInput').value = layout.cols;
-        document.getElementById('rowsInput').value = layout.rows;
-        gridEl.innerHTML = '';
-        gridEl.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
-
-        // 좌석 생성
-        layout.students.forEach((student, seatIdx) => {
-            const seat = document.createElement('div');
-            seat.setAttribute('data-id', seatIdx); // 정렬을 위해 ID 부여
-
-            let status = 0; 
-            const classLog = dbLog[currentClassIndex] || {};
-            const dayStatus = classLog[`day_${seatIdx}`] || 0;
-            
-            if(currentPeriod === 'day') status = dayStatus;
-            else {
-                if(dayStatus === 1) status = 1; 
-                else if(dayStatus === 2) status = 2; 
-                else status = classLog[`p${currentPeriod}_${seatIdx}`] || 0;
-            }
-
-            let statusClass = "present", statusText = "출석";
-            if(status === 1) { statusClass = "absent"; statusText = "결석"; }
-            else if(status === 2) { statusClass = "early"; statusText = "조퇴"; }
-            else if(status === 3) { statusClass = "missing"; statusText = "이석"; }
-            
-            seat.className = `seat ${statusClass}`;
-            if(student.isVisible === false) seat.classList.add('hidden-seat');
-
-            seat.innerHTML = `
-                <div class="seat-name">${student.name}</div>
-                ${student.isVisible ? `<div class="seat-status">${statusText}</div>` : ''}
-            `;
-
-            // 클릭 이벤트 (드래그 모드 아닐 때만)
-            seat.onmousedown = (e) => {
-                 if(!isLayoutMode) handleSeatClick(seatIdx, student);
-            };
-            // 터치 디바이스 대응
-            seat.ontouchend = (e) => {
-                 // 드래그 중이 아니었다면 클릭으로 간주
-                 if(!isLayoutMode) handleSeatClick(seatIdx, student);
-            };
-
-            gridEl.appendChild(seat);
-        });
-
-        // --- 🏗️ 드래그 앤 드롭 (SortableJS) 적용 ---
-        if (sortableInstance) sortableInstance.destroy(); // 기존 인스턴스 제거
-        
-        if (isLayoutMode) {
-            sortableInstance = new Sortable(gridEl, {
-                animation: 150,
-                delay: 100, // 터치 실수 방지용 딜레이
-                delayOnTouchOnly: true,
-                ghostClass: 'sortable-ghost',
-                dragClass: 'sortable-drag',
-                onEnd: function (evt) {
-                    const oldIdx = evt.oldIndex;
-                    const newIdx = evt.newIndex;
-                    if (oldIdx === newIdx) return;
-
-                    // 데이터 배열 재정렬
-                    const currentStudents = [...dbLayout[currentClassIndex].students];
-                    const [movedItem] = currentStudents.splice(oldIdx, 1);
-                    currentStudents.splice(newIdx, 0, movedItem);
-
-                    // Firebase 저장
-                    set(ref(database, `academy/config/${currentClassIndex}/students`), currentStudents);
-                    // 로그 데이터도 같이 이동해야 하나? -> 보통 자리배치는 사람만 이동함. 로그는 자리 번호 기준이라 꼬일 수 있음.
-                    // ★ 중요: 여기서는 "사람(이름/속성)"만 이동하고, "자리 번호에 매핑된 로그"는 그대로 둠.
-                    // 즉, 철수가 1번자리(출석)에서 2번자리(결석)로 가면 2번자리의 상태를 따라감. 
-                    // 이게 싫으면 로그도 같이 swap 해야하는데, 복잡도 증가. 현재는 자리배치 변경 -> 사람 이동으로 처리.
-                }
-            });
-        }
-    }
-
-    function handleSeatClick(seatIdx, student) {
-        // 드래그 앤 드롭 중 클릭 방지 등은 상위에서 처리됨
-        if(document.getElementById('modeLayout').checked) {
-            // 레이아웃 모드에서 "클릭"은 숨김/보임 토글 (드래그 안하고 클릭만 했을때)
-            // SortableJS가 클릭을 먹어버릴 수도 있어서, 별도 처리 필요하지만
-            // 여기서는 "빈공간 만들기" 기능을 위해 클릭 유지
-            const newData = {...student, isVisible: !(student.isVisible ?? true)};
-            if(newData.isVisible) newData.name = "빈자리";
-            const updated = [...dbLayout[currentClassIndex].students];
-            updated[seatIdx] = newData;
-            set(ref(database, `academy/config/${currentClassIndex}/students`), updated);
-            return;
-        }
-
-        if(document.getElementById('modeEditName').checked) {
-            if(student.isVisible === false) return;
-            const newName = prompt("이름 변경:", student.name);
-            if(newName) set(ref(database, `academy/config/${currentClassIndex}/students/${seatIdx}/name`), newName);
-            return;
-        }
-        
-        if(student.isVisible === false) return;
-
-        // 출석 체크
-        const classLog = dbLog[currentClassIndex] || {};
-        let nextStatus = 0;
-        if(currentPeriod === 'day') {
-            const curr = classLog[`day_${seatIdx}`] || 0;
-            nextStatus = (curr + 1) % 3; 
-            set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/day_${seatIdx}`), nextStatus);
-        } else {
-            const dayStatus = classLog[`day_${seatIdx}`] || 0;
-            if(dayStatus !== 0) { alert("결석/조퇴자는 수정불가"); return; }
-            const curr = classLog[`p${currentPeriod}_${seatIdx}`] || 0;
-            nextStatus = (curr === 0) ? 3 : 0;
-            set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/p${currentPeriod}_${seatIdx}`), nextStatus);
-        }
-    }
-
-    function renderLogbook() {
-        const table = document.getElementById('logbookTable');
-        let html = `<thead><tr><th>구분</th>`;
-        CLASSES.forEach((cls, idx) => { html += `<th>${dbLayout[idx]?.name || cls}</th>`; });
-        html += `</tr></thead><tbody>`;
-
-        html += `<tr><td>총원</td>`;
-        CLASSES.forEach((cls, idx) => {
-            const cnt = (dbLayout[idx]?.students || []).filter(s => s.isVisible !== false && s.name !== "빈자리").length;
-            html += `<td style="font-weight:bold;">${cnt}</td>`;
-        });
-        html += `</tr>`;
-
-        const types = [ {label:'미등원<br>(결석)', code:1}, {label:'조퇴', code:2} ];
-        types.forEach(type => {
-            html += `<tr><td>${type.label}</td>`;
-            CLASSES.forEach((cls, idx) => {
-                const names = getNames(idx, type.code);
-                html += `<td>${names.length ? `<span style="color:red; font-size:0.8rem; font-weight:bold;">${names.join(', ')}</span>` : '-'}</td>`;
-            });
-            html += `</tr>`;
-        });
-
-        for(let i=1; i<=8; i++) {
-            html += `<tr><td>${i}교시</td>`;
-            CLASSES.forEach((cls, idx) => {
-                const stats = getPeriodStats(idx, i);
-                html += `<td>
-                    <span style="font-size:1.1rem; font-weight:800;">${stats.present}</span>
-                    ${stats.missing.length ? `<span style="display:block; font-size:0.75rem; color:red;">(${stats.missing.join(',')})</span>` : ''}
-                </td>`;
-            });
-            html += `</tr>`;
-        }
-        html += `</tbody>`;
-        table.innerHTML = html;
-    }
-
-    function getNames(cIdx, code) {
-        const students = dbLayout[cIdx]?.students || [];
-        const log = dbLog[cIdx] || {};
-        return students.map((s, i) => {
-            if(s.isVisible===false || s.name==="빈자리") return null;
-            const status = log[`day_${i}`] || 0;
-            return status === code ? s.name : null;
-        }).filter(n => n);
-    }
-
-    function getPeriodStats(cIdx, p) {
-        const students = dbLayout[cIdx]?.students || [];
-        const log = dbLog[cIdx] || {};
-        let present = 0; let missing = [];
-        students.forEach((s, i) => {
-            if(s.isVisible===false || s.name==="빈자리") return;
-            const dStat = log[`day_${i}`] || 0;
-            const pStat = log[`p${p}_${i}`] || 0;
-            if(dStat === 1 || dStat === 2 || pStat === 3) {
-                if(pStat === 3) missing.push(s.name);
-            } else { present++; }
-        });
-        return { present, missing };
-    }
-
-    function renderUI() { renderPeriodBtns(); renderSeats(); }
-    
-    // Event Listeners
-    document.getElementById('modeLayout').addEventListener('change', renderSeats);
-    document.getElementById('modeEditName').addEventListener('change', renderSeats);
-    
-    document.getElementById('btnResize').onclick = () => {
-        const c = document.getElementById('colsInput').value;
-        const r = document.getElementById('rowsInput').value;
-        if(c && r && confirm("초기화 하시겠습니까?")) {
-            const arr = Array(r*c).fill(null).map(()=>({name:"빈자리", isVisible:true}));
-            set(ref(database, `academy/config/${currentClassIndex}`), { 
-                name: CLASSES[currentClassIndex], rows: Number(r), cols: Number(c), students: arr 
-            });
-        }
-    }
-    
-    document.getElementById('btnLoadMedical').onclick = () => {
-        if(!confirm("의대반 배치로 되돌리시겠습니까?")) return;
-        const ROWS=7, COLS=6;
-        const c1=["하지상","김선준","심현우","탁민혁","하지안","오동운","김은황"];
-        const c3=["김규원","최서윤","이여빈","김민호","전예서","임남경",""];
-        const c4=["손준민","오주하","임세은","김은서","김민지","박리원",""];
-        const c6=["서휘찬","조유빈","김태림","손준서","황건우","천서영","출입문"];
-        let st = [];
-        for(let r=0; r<ROWS; r++){
-            for(let c=0; c<COLS; c++){
-                let n="빈자리", v=true;
-                if(c==0) n=c1[r]||n; else if(c==1) v=false;
-                else if(c==2){ n=c3[r]||n; if(r==6) v=false; }
-                else if(c==3){ n=c4[r]||n; if(r==6) v=false; }
-                else if(c==4) v=false;
-                else if(c==5){ n=c6[r]||n; if(n=="출입문") v=false; }
-                st.push({name:n, isVisible:v});
-            }
-        }
-        set(ref(database, 'academy/config/0'), { name:"의대반(101)", rows:ROWS, cols:COLS, students:st });
-    };
-
-    renderUI();
 </script>
 </body>
 </html>
