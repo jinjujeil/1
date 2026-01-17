@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>스마트 학원 관리 시스템</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <title>스마트 학원 관리 (자유배치형)</title>
     <style>
-        /* --- 1. 기본 및 레이아웃 --- */
-        body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; padding-top: 110px; overflow: hidden; /* 전체 스크롤 방지 */ }
+        /* --- 1. 기본 스타일 --- */
+        body { font-family: 'Apple SD Gothic Neo', sans-serif; background-color: #f1f5f9; margin: 0; padding: 0; overflow: hidden; /* 스크롤 없음 (캔버스 방식) */ }
         
+        /* 고정 헤더 */
         .fixed-header {
-            position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
-            background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            position: absolute; top: 0; left: 0; width: 100%; height: 110px; z-index: 1000;
+            background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        
         .top-bar {
             display: flex; justify-content: space-between; align-items: center;
             padding: 10px 20px; border-bottom: 1px solid #e2e8f0; height: 50px; box-sizing: border-box;
@@ -21,86 +20,52 @@
         .app-title { font-weight: 800; font-size: 1.1rem; color: #1e293b; }
         .clock { font-weight: 600; color: #3b82f6; font-size: 0.9rem; }
 
-        .main-nav { display: flex; }
+        .main-nav { display: flex; height: 60px; }
         .nav-btn {
-            flex: 1; padding: 15px; border: none; background: white; 
+            flex: 1; border: none; background: white; 
             font-size: 1rem; font-weight: bold; color: #64748b; cursor: pointer;
             border-bottom: 3px solid transparent; transition: all 0.2s;
         }
         .nav-btn.active { color: #3b82f6; border-bottom-color: #3b82f6; background: #f8fafc; }
 
-        .container { max-width: 1000px; margin: 0 auto; padding: 15px; height: calc(100vh - 110px); overflow-y: auto; }
-        .view-section { display: none; height: 100%; }
-        .view-section.active { display: block; }
-
-        /* --- 2. 출석체크 화면 --- */
-        .control-panel { background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .period-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; margin-bottom: 10px; }
-        .period-btn { 
-            padding: 8px 14px; border: 1px solid #cbd5e1; background: white; 
-            border-radius: 20px; font-size: 0.9rem; white-space: nowrap; cursor: pointer;
+        /* --- 2. 캔버스 영역 (화면 전체) --- */
+        #canvasContainer {
+            position: absolute; top: 110px; left: 0; right: 0; bottom: 0;
+            background-color: #e5e7eb; /* 배경색 (책상 외 공간) */
+            overflow: hidden;
+            touch-action: none; /* 브라우저 기본 제스처 차단 */
+            cursor: grab;
         }
-        .period-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; font-weight: bold; }
-        .period-btn.day-record { border-color: #ef4444; color: #ef4444; }
-        .period-btn.day-record.active { background: #ef4444; color: white; }
+        #canvasContainer:active { cursor: grabbing; }
 
-        .class-tabs { display: flex; gap: 5px; margin-bottom: 15px; overflow-x: auto; }
-        .class-tab { 
-            flex: 1; padding: 12px; background: #e2e8f0; border: none; border-radius: 8px; 
-            font-weight: bold; color: #64748b; min-width: 70px; cursor: pointer; white-space: nowrap;
-        }
-        .class-tab.active { background: #3b82f6; color: white; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); }
-
-        /* 줌 컨트롤 (숨김 가능하지만 표시해둠) */
-        .zoom-controls { 
-            display: flex; align-items: center; justify-content: flex-end; gap: 10px; 
-            margin-bottom: 10px; background: #fff; padding: 8px 15px; border-radius: 20px; 
-            border: 1px solid #e2e8f0; width: fit-content; margin-left: auto;
-        }
-        .zoom-btn { background: #f1f5f9; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer; }
-        input[type=range] { width: 100px; }
-
-        /* 💺 좌석 컨테이너 (터치 이벤트 영역) */
-        .seat-container {
-            overflow: auto; 
-            background: #e2e8f0;
-            border-radius: 12px;
-            padding: 0; /* 패딩 제거하고 내부 wrapper에서 처리 */
-            height: 65vh; 
-            position: relative;
-            touch-action: none; /* 브라우저 기본 줌 방지 (우리가 직접 제어) */
-            display: flex; justify-content: center; align-items: flex-start;
-        }
-        
-        /* 실제 확대/축소 되는 래퍼 */
-        .zoom-wrapper {
-            padding: 40px;
-            transform-origin: top left;
-            transition: transform 0.05s linear; /* 딜레이 줄임 */
+        /* 실제 내용물 (확대/이동 되는 판) */
+        #world {
+            position: absolute; top: 0; left: 0;
+            width: 2000px; height: 2000px; /* 아주 넓은 공간 */
+            transform-origin: 0 0;
+            /* 배경에 격자무늬를 줘서 공간감을 줌 */
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
         }
 
-        .seat-grid {
-            display: grid; gap: 10px; 
-            min-width: 600px; 
-        }
-
+        /* --- 3. 좌석 스타일 (절대 위치) --- */
         .seat {
-            aspect-ratio: 1.2;
+            position: absolute; /* 자유 배치의 핵심 */
+            width: 80px; height: 60px;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: white; border: 2px solid #cbd5e1; border-radius: 10px;
-            cursor: pointer; user-select: none; position: relative;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            /* 드래그 시 부드럽게 */
-            transition: border-color 0.2s, background-color 0.2s; 
+            background: white; border: 2px solid #cbd5e1; border-radius: 8px;
+            cursor: pointer; user-select: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: border-color 0.2s, transform 0.1s;
+            z-index: 10;
         }
-        /* 드래그 중인 아이템 스타일 */
-        .sortable-ghost { opacity: 0.4; background: #c7d2fe; border: 2px dashed #4f46e5; }
-        .sortable-drag { opacity: 1; transform: scale(1.05); box-shadow: 0 10px 15px rgba(0,0,0,0.2); }
+        /* 드래그 중일 때 효과 */
+        .seat.dragging { opacity: 0.8; z-index: 100; box-shadow: 0 10px 20px rgba(0,0,0,0.2); transform: scale(1.05); }
 
-        .seat-name { font-weight: 800; font-size: 1.1rem; color: #334155; margin-bottom: 4px; pointer-events: none; }
-        .seat-status { font-size: 0.8rem; font-weight: bold; color: #94a3b8; pointer-events: none; }
+        .seat-name { font-weight: 800; font-size: 1rem; color: #334155; pointer-events: none; }
+        .seat-status { font-size: 0.75rem; font-weight: bold; color: #94a3b8; pointer-events: none; }
 
-        /* 상태 디자인 */
+        /* 상태 색상 */
         .seat.present { border-color: #22c55e; color: #15803d; }
         .seat.present .seat-status { color: #16a34a; }
         .seat.absent { border-color: #ef4444; background: #fef2f2; }
@@ -110,26 +75,59 @@
         .seat.early .seat-status { color: #d97706; }
         .seat.missing { border-color: #64748b; background: #f1f5f9; opacity: 0.6; }
         .seat.missing .seat-name { text-decoration: line-through; color: #64748b; }
-        .seat.hidden-seat { visibility: hidden; }
-        .editing .seat.hidden-seat { visibility: visible; opacity: 0.5; border: 2px dashed #999; background: #eee;}
 
-        /* --- 3. 관리대장 --- */
-        .logbook-container { background: white; padding: 20px; border-radius: 12px; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 600px; font-size: 0.9rem; }
-        th, td { border: 1px solid #cbd5e1; padding: 10px 5px; text-align: center; }
-        th { background: #f8fafc; color: #334155; font-weight: bold; }
+        /* --- 4. 컨트롤 패널 (떠있는 UI) --- */
+        .floating-controls {
+            position: absolute; top: 120px; left: 10px; right: 10px;
+            pointer-events: none; /* 배경 터치는 통과시킴 */
+            z-index: 2000;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .control-box {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px; border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            pointer-events: auto; /* 버튼 클릭은 가능하게 */
+        }
+
+        .period-scroll { display: flex; gap: 5px; overflow-x: auto; }
+        .period-btn { 
+            padding: 6px 12px; border: 1px solid #cbd5e1; background: white; 
+            border-radius: 15px; font-size: 0.85rem; white-space: nowrap; cursor: pointer;
+        }
+        .period-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .period-btn.day-record { border-color: #ef4444; color: #ef4444; }
+        .period-btn.day-record.active { background: #ef4444; color: white; }
+
+        .class-scroll { display: flex; gap: 5px; overflow-x: auto; margin-top: 5px;}
+        .class-tab { 
+            padding: 8px 12px; background: #e2e8f0; border: none; border-radius: 8px; 
+            font-weight: bold; color: #64748b; cursor: pointer; white-space: nowrap; font-size: 0.9rem;
+        }
+        .class-tab.active { background: #3b82f6; color: white; }
+
+        /* 설정창 */
+        .settings-box { display: none; text-align: right; font-size: 0.9rem;}
+        .settings-box.show { display: block; }
+        .btn-action { background: #475569; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+
+        /* --- 5. 관리대장 (별도 화면) --- */
+        #logbookView {
+            display: none; position: absolute; top: 110px; left: 0; right: 0; bottom: 0;
+            background: white; z-index: 3000; overflow-y: auto; padding: 20px;
+        }
+        #logbookView.active { display: block; }
         
-        .settings-bar { text-align: right; margin-top: 10px; display: none; background: #f0fdf4; padding:10px; border-radius:8px;}
-        .settings-bar.show { display: block; }
-        .btn-update { background: #475569; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
-        .btn-reset { background: #4f46e5; color: white; padding: 8px 15px; border-radius: 6px; border:none; font-weight:bold; cursor:pointer;}
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: center; }
+        th { background: #f8fafc; color: #334155; }
     </style>
 </head>
 <body>
 
 <div class="fixed-header">
     <div class="top-bar">
-        <div class="app-title">🏫 스마트 학원 관리</div>
+        <div class="app-title">🏫 스마트 학원 관리 (자유배치)</div>
         <div class="clock" id="seoulClock">00:00</div>
     </div>
     <nav class="main-nav">
@@ -138,14 +136,400 @@
     </nav>
 </div>
 
-<div id="viewAttendance" class="view-section active container">
-    <div class="control-panel">
-        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-            <div id="periodInfo" style="font-size:0.9rem; font-weight:bold; color:#333;">전체 기록 모드</div>
+<div id="canvasContainer">
+    <div id="world">
+        </div>
+</div>
+
+<div id="attendanceControls" class="floating-controls">
+    <div class="control-box">
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+            <div id="periodInfo" style="font-size:0.9rem; font-weight:bold;">전체 기록 모드</div>
             <div style="font-size:0.8rem;">
                 <label><input type="checkbox" id="modeEditName"> 이름수정</label>
-                <label style="color:blue; margin-left:10px; font-weight:bold;"><input type="checkbox" id="modeLayout"> 🏗️자리배치(드래그)</label>
+                <label style="color:blue; margin-left:8px; font-weight:bold;"><input type="checkbox" id="modeLayout"> 🏗️자유배치</label>
             </div>
+        </div>
+        <div class="period-scroll" id="periodBtns"></div>
+        <div class="class-scroll" id="classTabs"></div>
+        
+        <div id="layoutTools" class="settings-box">
+            <hr style="border:0; border-top:1px solid #eee; margin:5px 0;">
+            <span style="color:#666; font-size:0.8rem;">초기화: </span>
+            <button class="btn-action" onclick="resetToGrid(5,6)">5x6 격자생성</button>
+            <button class="btn-action" style="background:#4f46e5;" onclick="resetToMedical()">📸의대반 배치</button>
+        </div>
+    </div>
+</div>
+
+<div id="logbookView">
+    <h3>📋 실시간 관리 대장</h3>
+    <table id="logbookTable"></table>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+    // 🔴 Firebase 키 입력 🔴
+    const firebaseConfig = {
+        apiKey: "AIzaSyAGdK_AGLtW0DpTvJ3KKrdfq_InIBUI-lY",
+        authDomain: "attendence-e9aa8.firebaseapp.com",
+        projectId: "attendence-e9aa8",
+        storageBucket: "attendence-e9aa8.firebasestorage.app",
+        messagingSenderId: "449396483783",
+        appId: "1:449396483783:web:091b692225089b85a140e2",
+        measurementId: "G-5DW7DFXBSC"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    // --- 변수 ---
+    const CLASSES = ['의대반(101)', 'B반', 'C반', 'D반', 'E반', 'F반'];
+    let currentClassIndex = 0;
+    let currentPeriod = 'day'; 
+    let todayStr = "";
+    
+    // 캔버스 상태
+    let panX = 100, panY = 100, scale = 1.0;
+    let isPanning = false, startX = 0, startY = 0;
+    
+    let dbLayout = {}; 
+    let dbLog = {};    
+
+    // --- 시계 ---
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('seoulClock').innerText = now.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
+        const offset = now.getTimezoneOffset() * 60000;
+        const krTime = new Date(now.getTime() + offset + (9 * 60 * 60 * 1000));
+        todayStr = krTime.toISOString().split('T')[0];
+    }
+    setInterval(updateClock, 1000); updateClock();
+
+    // --- 화면 전환 ---
+    window.switchView = (mode) => {
+        const controls = document.getElementById('attendanceControls');
+        const canvas = document.getElementById('canvasContainer');
+        const logbook = document.getElementById('logbookView');
+        const btns = document.querySelectorAll('.nav-btn');
+
+        if(mode === 'attendance') {
+            controls.style.display = 'flex';
+            canvas.style.display = 'block';
+            logbook.classList.remove('active');
+            btns[0].classList.add('active');
+            btns[1].classList.remove('active');
+        } else {
+            controls.style.display = 'none';
+            canvas.style.display = 'none';
+            logbook.classList.add('active');
+            btns[0].classList.remove('active');
+            btns[1].classList.add('active');
+            renderLogbook();
+        }
+    }
+
+    // --- 📡 Firebase 데이터 ---
+    onValue(ref(database, 'academy/config'), snap => { dbLayout = snap.val() || {}; renderSeats(); renderLogbook(); });
+    onValue(ref(database, `academy/logs/${todayStr}`), snap => { dbLog = snap.val() || {}; renderSeats(); renderLogbook(); });
+
+    // --- 🎨 캔버스 조작 (Pan & Zoom) ---
+    const container = document.getElementById('canvasContainer');
+    const world = document.getElementById('world');
+
+    function updateTransform() {
+        world.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    }
+
+    // 1. 배경 드래그 (이동)
+    container.addEventListener('pointerdown', e => {
+        if(e.target !== container && e.target !== world) return; // 좌석 클릭시엔 이동 안함
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+        container.setPointerCapture(e.pointerId);
+    });
+
+    container.addEventListener('pointermove', e => {
+        if(!isPanning) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+    });
+
+    container.addEventListener('pointerup', () => { isPanning = false; });
+
+    // 2. 휠 줌 (PC)
+    container.addEventListener('wheel', e => {
+        e.preventDefault();
+        const zoomSpeed = 0.001;
+        const newScale = scale - e.deltaY * zoomSpeed;
+        scale = Math.min(Math.max(0.3, newScale), 3.0);
+        updateTransform();
+    }, { passive: false });
+
+    // 3. 핀치 줌 (모바일)
+    let initDist = 0;
+    let initScale = 1;
+    container.addEventListener('touchstart', e => {
+        if(e.touches.length === 2) {
+            initDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            initScale = scale;
+        }
+    });
+    container.addEventListener('touchmove', e => {
+        if(e.touches.length === 2) {
+            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            scale = Math.min(Math.max(0.3, initScale * (dist / initDist)), 3.0);
+            updateTransform();
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+
+    // --- 💺 좌석 렌더링 & 드래그 로직 ---
+    function renderSeats() {
+        // UI 동기화
+        renderUIControls();
+        
+        world.innerHTML = ''; // 초기화
+        const students = dbLayout[currentClassIndex]?.students || [];
+        const isLayoutMode = document.getElementById('modeLayout').checked;
+        const layoutTools = document.getElementById('layoutTools');
+        
+        if(isLayoutMode) layoutTools.classList.add('show');
+        else layoutTools.classList.remove('show');
+
+        students.forEach((s, idx) => {
+            if(!s.isVisible) return; // 숨김 좌석은 아예 안 그림
+
+            const el = document.createElement('div');
+            el.className = 'seat';
+            
+            // 저장된 좌표가 없으면 기본 좌표 부여 (겹치지 않게)
+            const x = s.x ?? (idx % 6) * 100 + 50;
+            const y = s.y ?? Math.floor(idx / 6) * 80 + 50;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+
+            // 상태 표시
+            let status = 0; 
+            const log = dbLog[currentClassIndex] || {};
+            if(currentPeriod === 'day') status = log[`day_${idx}`] || 0;
+            else {
+                const dayStatus = log[`day_${idx}`] || 0;
+                if(dayStatus > 0) status = dayStatus;
+                else status = log[`p${currentPeriod}_${idx}`] || 0;
+            }
+
+            if(status===1) { el.classList.add('absent'); el.innerHTML += `<span class="seat-status">결석</span>`; }
+            else if(status===2) { el.classList.add('early'); el.innerHTML += `<span class="seat-status">조퇴</span>`; }
+            else if(status===3) { el.classList.add('missing'); el.innerHTML += `<span class="seat-status">이석</span>`; }
+            else { el.classList.add('present'); el.innerHTML += `<span class="seat-status">출석</span>`; }
+
+            el.insertAdjacentHTML('afterbegin', `<div class="seat-name">${s.name}</div>`);
+
+            // 드래그 로직 (자유 배치)
+            el.addEventListener('pointerdown', e => {
+                if(!isLayoutMode) {
+                    handleSeatClick(idx, s); // 일반 모드에선 출석체크
+                    return;
+                }
+                
+                // 배치 모드: 드래그 시작
+                e.stopPropagation(); // 캔버스 Pan 방지
+                el.classList.add('dragging');
+                el.setPointerCapture(e.pointerId);
+                
+                // 마우스 클릭 위치와 요소 위치의 차이 계산
+                const rect = el.getBoundingClientRect();
+                const worldRect = world.getBoundingClientRect();
+                
+                // 현재 world 내에서의 상대 좌표 (scale 고려)
+                const startLeft = (rect.left - worldRect.left) / scale;
+                const startTop = (rect.top - worldRect.top) / scale;
+                const clickOffsetX = (e.clientX - rect.left) / scale;
+                const clickOffsetY = (e.clientY - rect.top) / scale;
+
+                function move(evt) {
+                    const worldRectNow = world.getBoundingClientRect();
+                    const newX = (evt.clientX - worldRectNow.left) / scale - clickOffsetX;
+                    const newY = (evt.clientY - worldRectNow.top) / scale - clickOffsetY;
+                    
+                    el.style.left = `${newX}px`;
+                    el.style.top = `${newY}px`;
+                }
+
+                function up(evt) {
+                    el.removeEventListener('pointermove', move);
+                    el.removeEventListener('pointerup', up);
+                    el.classList.remove('dragging');
+                    
+                    // 좌표 저장
+                    const finalX = parseFloat(el.style.left);
+                    const finalY = parseFloat(el.style.top);
+                    set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/x`), Math.round(finalX));
+                    set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/y`), Math.round(finalY));
+                }
+                el.addEventListener('pointermove', move);
+                el.addEventListener('pointerup', up);
+            });
+
+            world.appendChild(el);
+        });
+    }
+
+    function handleSeatClick(idx, s) {
+        if(document.getElementById('modeEditName').checked) {
+            const name = prompt("이름 변경", s.name);
+            if(name) set(ref(database, `academy/config/${currentClassIndex}/students/${idx}/name`), name);
+            return;
+        }
+
+        const log = dbLog[currentClassIndex] || {};
+        if(currentPeriod === 'day') {
+            const next = ((log[`day_${idx}`]||0) + 1) % 3;
+            set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/day_${idx}`), next);
+        } else {
+            if((log[`day_${idx}`]||0) !== 0) { alert("결석/조퇴자는 수정 불가"); return; }
+            const curr = log[`p${currentPeriod}_${idx}`] || 0;
+            set(ref(database, `academy/logs/${todayStr}/${currentClassIndex}/p${currentPeriod}_${idx}`), curr===0 ? 3 : 0);
+        }
+    }
+
+    // --- UI 업데이트 ---
+    function renderUIControls() {
+        // 교시 버튼
+        const pCont = document.getElementById('periodBtns');
+        pCont.innerHTML = '';
+        ['day',1,2,3,4,5,6,7,8].forEach(p => {
+            const btn = document.createElement('button');
+            const isDay = p==='day';
+            btn.className = `period-btn ${isDay?'day-record':''} ${currentPeriod==String(p)?'active':''}`;
+            btn.innerText = isDay ? '전체명단' : `${p}교시`;
+            btn.onclick = () => { currentPeriod = String(p); renderSeats(); };
+            pCont.appendChild(btn);
+        });
+
+        // 반 탭
+        const cCont = document.getElementById('classTabs');
+        cCont.innerHTML = '';
+        CLASSES.forEach((cls, i) => {
+            const btn = document.createElement('button');
+            btn.className = `class-tab ${i===currentClassIndex?'active':''}`;
+            btn.innerText = dbLayout[i]?.name || cls;
+            btn.onclick = () => { currentClassIndex = i; renderSeats(); };
+            cCont.appendChild(btn);
+        });
+        
+        document.getElementById('periodInfo').innerText = currentPeriod === 'day' 
+            ? "📢 결석/조퇴 체크" : `📢 ${currentPeriod}교시 이석 체크`;
+    }
+
+    // --- 🛠️ 초기화 도구 (Grid -> Absolute 변환) ---
+    window.resetToGrid = (cols, rows) => {
+        if(!confirm("현재 반을 초기화하고 격자로 재배치합니다.")) return;
+        let students = [];
+        for(let r=0; r<rows; r++) {
+            for(let c=0; c<cols; c++) {
+                // 좌표 자동 계산 (간격 90x70)
+                students.push({
+                    name: "빈자리", 
+                    isVisible: true,
+                    x: c * 90 + 50, 
+                    y: r * 70 + 50 
+                });
+            }
+        }
+        set(ref(database, `academy/config/${currentClassIndex}`), { 
+            name: CLASSES[currentClassIndex], students 
+        });
+    }
+
+    window.resetToMedical = () => {
+        if(!confirm("의대반(101) 스타일로 초기화합니다.")) return;
+        // 의대반 사진 기반 좌표 하드코딩 (대략적 위치)
+        const students = [];
+        const add = (name, x, y) => students.push({name, isVisible:true, x, y});
+        
+        // 1열 (1인실)
+        const col1Names = ["하지상","김선준","심현우","탁민혁","하지안","오동운","김은황"];
+        col1Names.forEach((n, i) => add(n, 50, 50 + i*70));
+
+        // 2열 (책상 그룹 왼쪽) - 조금 띄움 (x=200)
+        const col2Names = ["김규원","최서윤","이여빈","김민호","전예서","임남경"];
+        col2Names.forEach((n, i) => add(n, 200, 50 + i*70));
+
+        // 3열 (책상 그룹 오른쪽) - 붙임 (x=290)
+        const col3Names = ["손준민","오주하","임세은","김은서","김민지","박리원"];
+        col3Names.forEach((n, i) => add(n, 290, 50 + i*70));
+
+        // 4열 (창가) - 멀리 띄움 (x=450)
+        const col4Names = ["서휘찬","조유빈","김태림","손준서","황건우","천서영"];
+        col4Names.forEach((n, i) => add(n, 450, 50 + i*70));
+
+        set(ref(database, `academy/config/${currentClassIndex}`), { 
+            name: "의대반(101)", students 
+        });
+    }
+
+    // --- 관리대장 렌더링 ---
+    function renderLogbook() {
+        const table = document.getElementById('logbookTable');
+        let html = `<thead><tr><th>구분</th>`;
+        CLASSES.forEach((cls, i) => html += `<th>${dbLayout[i]?.name || cls}</th>`);
+        html += `</tr></thead><tbody>`;
+
+        // 총원
+        html += `<tr><td>총원</td>`;
+        CLASSES.forEach((cls, i) => {
+            const cnt = (dbLayout[i]?.students||[]).filter(s=>s.isVisible).length;
+            html += `<td>${cnt}</td>`;
+        });
+        html += `</tr>`;
+
+        // 결석/조퇴
+        [{t:'미등원', c:1}, {t:'조퇴', c:2}].forEach(type => {
+            html += `<tr><td>${type.t}</td>`;
+            CLASSES.forEach((cls, i) => {
+                const names = (dbLayout[i]?.students||[]).map((s, idx) => {
+                    const st = (dbLog[i]||{})[`day_${idx}`];
+                    return (s.isVisible && st===type.c) ? s.name : null;
+                }).filter(n=>n);
+                html += `<td>${names.length ? `<span style="color:red; font-size:0.8rem">${names.join(',')}</span>` : '-'}</td>`;
+            });
+            html += `</tr>`;
+        });
+
+        // 교시별
+        for(let p=1; p<=8; p++) {
+            html += `<tr><td>${p}교시</td>`;
+            CLASSES.forEach((cls, i) => {
+                const st = (dbLayout[i]?.students||[]);
+                let pres = 0, miss = [];
+                st.forEach((s, idx) => {
+                    if(!s.isVisible) return;
+                    const log = dbLog[i]||{};
+                    const d = log[`day_${idx}`]||0;
+                    const c = log[`p${p}_${idx}`]||0;
+                    if(d===1 || d===2 || c===3) { if(c===3) miss.push(s.name); }
+                    else pres++;
+                });
+                html += `<td><b>${pres}</b>${miss.length?`<br><small style="color:red">(${miss.join(',')})</small>`:''}</td>`;
+            });
+            html += `</tr>`;
+        }
+        table.innerHTML = html + `</tbody>`;
+    }
+
+    // 이벤트 리스너
+    document.getElementById('modeLayout').onchange = renderSeats;
+    document.getElementById('modeEditName').onchange = renderSeats;
+</script>
+</body>
+</html>
         </div>
         <div class="period-scroll" id="periodBtns"></div>
     </div>
